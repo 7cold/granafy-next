@@ -20,9 +20,12 @@ export async function getLancamentosFilter({
     ano?: number | null
 }) {
 
+    const { supabase } = await import("@/lib/supabase")
+    const { data: { user } } = await supabase.auth.getUser()
+
     let query = supabase
         .from("lancamentos")
-        .select("*")
+        .select("*").eq("user", user?.email)
 
     const temContaSelecionada = idsContas && idsContas.length > 0
 
@@ -54,6 +57,10 @@ export async function getLancamentosComCategoria({
     mes: number
     ano: number
 }) {
+
+    const { supabase } = await import("@/lib/supabase")
+    const { data: { user } } = await supabase.auth.getUser()
+
     const dataInicio = `${ano}-${String(mes).padStart(2, "0")}-01`
     const dataFim =
         mes === 12
@@ -65,6 +72,7 @@ export async function getLancamentosComCategoria({
             supabase
                 .from("lancamentos")
                 .select("*")
+                .eq("user", user?.email)
                 .gte("data", dataInicio)
                 .lt("data", dataFim)
                 .order("data", { ascending: false }),

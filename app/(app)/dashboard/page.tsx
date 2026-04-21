@@ -16,6 +16,7 @@ import { ResultadoAnualCard } from "@/components/layout/fluxo-card-anual"
 import { ResultadoMesAtualCard } from "@/components/layout/fluxo-card-mes"
 import { CategoriasMesCard } from "@/components/layout/fluxo-card-piechart"
 
+
 function ResumoCards() {
     const hoje = new Date()
     const mesInicio = format(startOfMonth(hoje), "yyyy-MM-dd")
@@ -25,11 +26,16 @@ function ResumoCards() {
     const { data: saldoTotal } = useQuery({
         queryKey: ["saldo-total"],
         queryFn: async () => {
+
             const { supabase } = await import("@/lib/supabase")
+
+
+            const { data: { user } } = await supabase.auth.getUser()
             const { data } = await supabase
                 .from("lancamentos")
                 .select("valor")
                 .eq("pago", true)
+                .eq("user", user?.email)
 
             return (data ?? []).reduce((acc, l) => acc + (l.valor || 0), 0)
         },
@@ -40,13 +46,14 @@ function ResumoCards() {
         queryKey: ["entradas-mes", mesInicio, mesFim],
         queryFn: async () => {
             const { supabase } = await import("@/lib/supabase")
+            const { data: { user } } = await supabase.auth.getUser()
             const { data } = await supabase
                 .from("lancamentos")
                 .select("valor")
                 .eq("pago", true)
                 .gte("data", mesInicio)
                 .lte("data", mesFim)
-                .gt("valor", 0)
+                .gt("valor", 0).eq("user", user?.email)
 
             return (data ?? []).reduce((acc, l) => acc + (l.valor || 0), 0)
         },
@@ -57,13 +64,14 @@ function ResumoCards() {
         queryKey: ["saidas-mes", mesInicio, mesFim],
         queryFn: async () => {
             const { supabase } = await import("@/lib/supabase")
+            const { data: { user } } = await supabase.auth.getUser()
             const { data } = await supabase
                 .from("lancamentos")
                 .select("valor")
                 .eq("pago", true)
                 .gte("data", mesInicio)
                 .lte("data", mesFim)
-                .lt("valor", 0)
+                .lt("valor", 0).eq("user", user?.email)
 
             return Math.abs((data ?? []).reduce((acc, l) => acc + (l.valor || 0), 0))
         },
