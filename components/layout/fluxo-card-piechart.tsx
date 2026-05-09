@@ -4,9 +4,14 @@ import { useQuery } from "@tanstack/react-query"
 import { getLancamentosComCategoria } from "@/services/lancamentos"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
+import { useState } from "react"
 import { Pie, PieChart, Cell } from "recharts"
-import { format } from "date-fns"
+import { format, addMonths, subMonths } from "date-fns"
+import { ChevronLeft, ChevronRight } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { ptBR } from "date-fns/locale"
+import { useLancamentosStore } from "@/store/lancamentosStore"
+import { useUser } from "@/hooks/useUser"
 
 const CORES = [
     "var(--chart-1)",
@@ -16,15 +21,15 @@ const CORES = [
     "var(--chart-5)",
 ]
 
-function useCategoriasMesAtual() {
-    return useQuery({
-        queryKey: ["relatorio-categorias-mes-atual"],
-        queryFn: async () => {
-            const hoje = new Date()
-            const mes = hoje.getMonth() + 1
-            const ano = hoje.getFullYear()
+function useCategoriasMes(mes: number, ano: number) {
+    const { data: user } = useUser()
 
-            const data = await getLancamentosComCategoria({ mes, ano })
+    return useQuery({
+        queryKey: ["relatorio-categorias-mes", mes, ano, user?.email],
+        enabled: !!user?.email,
+        queryFn: async () => {
+
+            const data = await getLancamentosComCategoria({ mes, ano, userEmail: user?.email })
 
             const recebimentos: Record<string, number> = {}
             const despesas: Record<string, number> = {}
@@ -43,6 +48,7 @@ function useCategoriasMesAtual() {
                 despesas: Object.entries(despesas).map(([cat, valor]) => ({ cat, valor })),
             }
         },
+        staleTime: 1000 * 60 * 5,
     })
 }
 
@@ -140,17 +146,51 @@ function PieSection({
 }
 
 export function CategoriasMesCard() {
-    const { data, isLoading } = useCategoriasMesAtual()
-
     const hoje = new Date()
-    const mesLabel = format(hoje, "MMMM 'de' yyyy", { locale: ptBR })
+    const { mesSelecionado, anoSelecionado, setMes, setAno } = useLancamentosStore()
+
+    const mes = mesSelecionado ?? (hoje.getMonth() + 1)
+    const ano = anoSelecionado ?? hoje.getFullYear()
+    const mesRef = new Date(ano, mes - 1, 1)
+
+    const { data, isLoading } = useCategoriasMes(mes, ano)
+
+    const mesLabel = format(mesRef, "MMMM 'de' yyyy", { locale: ptBR })
     const mesCapitalizado = mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1)
 
     return (
         <Card>
-            <CardHeader>
-                <CardTitle>Categorias do Mês</CardTitle>
-                <CardDescription>{mesCapitalizado}</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div className="flex flex-col space-y-1.5">
+                    <CardTitle>Categorias do Mês</CardTitle>
+                    <CardDescription>{mesCapitalizado}</CardDescription>
+                </div>
+                <div className="flex items-center gap-1">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0"
+                        onClick={() => {
+                            const prev = subMonths(mesRef, 1)
+                            setMes(prev.getMonth() + 1)
+                            setAno(prev.getFullYear())
+                        }}
+                    >
+                        <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0"
+                        onClick={() => {
+                            const next = addMonths(mesRef, 1)
+                            setMes(next.getMonth() + 1)
+                            setAno(next.getFullYear())
+                        }}
+                    >
+                        <ChevronRight className="h-4 w-4" />
+                    </Button>
+                </div>
             </CardHeader>
 
             <CardContent>

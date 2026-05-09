@@ -11,11 +11,16 @@ export function ComponenteContas() {
     const contasItems = (contas ?? []).filter((c: any) => c.ativo === true);
     const anchor = useComboboxAnchor()
 
+    // Garante que a referência dos objetos selecionados seja a mesma dos itens da lista
+    const value = contasSelecionadas.map((cs: any) => 
+        contasItems.find((ci: any) => ci.id === cs.id) || cs
+    )
+
     return (
         <Combobox
             multiple
             items={contasItems}
-            value={contasSelecionadas}
+            value={value}
             onValueChange={setContas}
         >
             <FieldLabel>Contas</FieldLabel>

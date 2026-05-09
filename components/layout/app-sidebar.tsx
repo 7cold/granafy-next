@@ -25,23 +25,37 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 
+import {
+    LayoutDashboard,
+    ArrowLeftRight,
+    Tags,
+    Wallet,
+    CreditCard,
+    BarChart3,
+    Home,
+    Settings2
+} from "lucide-react"
+
 const data = {
     navMain: [
         {
             title: "Início",
             url: "#",
+            icon: Home,
             items: [
-                { title: "Dashboard", url: "/dashboard", isActive: true },
+                { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
             ],
         },
         {
-            title: "Opções",
+            title: "Operações",
             url: "#",
+            icon: Settings2,
             items: [
-                { title: "Lançamentos", url: "/lancamentos", isActive: false },
-                { title: "Relatórios", url: "/relatorios", isActive: false },
-                { title: "Categorias", url: "/categorias", isActive: false },
-                { title: "Contas", url: "/contas", isActive: false },
+                { title: "Lançamentos", url: "/lancamentos", icon: ArrowLeftRight },
+                { title: "Categorias", url: "/categorias", icon: Tags },
+                { title: "Contas", url: "/contas", icon: Wallet },
+                { title: "Cartões", url: "/cartoes", icon: CreditCard },
+                { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
             ],
         },
     ],
@@ -80,10 +94,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <SidebarGroupLabel>{item.title}</SidebarGroupLabel>
                         <SidebarGroupContent>
                             <SidebarMenu>
-                                {item.items.map((item) => (
-                                    <SidebarMenuItem key={item.title}>
-                                        <SidebarMenuButton asChild isActive={item.isActive}>
-                                            <a href={item.url}>{item.title}</a>
+                                {item.items.map((subItem) => (
+                                    <SidebarMenuItem key={subItem.title}>
+                                        <SidebarMenuButton asChild>
+                                            <a href={subItem.url} className="flex items-center gap-3">
+                                                {subItem.icon && <subItem.icon className="h-4 w-4" />}
+                                                <span>{subItem.title}</span>
+                                            </a>
                                         </SidebarMenuButton>
                                     </SidebarMenuItem>
                                 ))}

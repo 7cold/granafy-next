@@ -19,6 +19,7 @@ type DialogDeleteLancamentoProps = {
     lancamentoId: number
     temParcelamento: boolean
     idParcelamento: number | null
+    idRecorrencia?: number | null
 }
 
 export function DialogDeleteLancamento({
@@ -27,12 +28,13 @@ export function DialogDeleteLancamento({
     lancamentoId,
     temParcelamento,
     idParcelamento,
+    idRecorrencia,
 }: DialogDeleteLancamentoProps) {
     const queryClient = useQueryClient()
 
     const mutationDelete = useMutation({
         mutationFn: (opcao: "apenas_este" | "este_e_proximos" | "todos") =>
-            deleteLancamentoComOpcao(lancamentoId, opcao, idParcelamento),
+            deleteLancamentoComOpcao(lancamentoId, opcao, idParcelamento, idRecorrencia),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["lancamentos"] })
             toast.success("Lançamento(s) excluído(s)")
@@ -43,7 +45,7 @@ export function DialogDeleteLancamento({
         },
     })
 
-    if (!temParcelamento) {
+    if (!temParcelamento && !idRecorrencia) {
         // sem parcelamento — apaga direto
         return (
             <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -72,7 +74,7 @@ export function DialogDeleteLancamento({
         <AlertDialog open={open} onOpenChange={onOpenChange}>
             <AlertDialogContent>
                 <AlertDialogHeader>
-                    <AlertDialogTitle>Excluir lançamento parcelado?</AlertDialogTitle>
+                    <AlertDialogTitle>Excluir lançamento {idRecorrencia ? "recorrente" : "parcelado"}?</AlertDialogTitle>
                     <AlertDialogDescription>
                         Escolha como deseja proceder:
                     </AlertDialogDescription>
@@ -86,7 +88,7 @@ export function DialogDeleteLancamento({
                     >
                         <span className="font-medium">Apenas este</span>
                         <p className="text-xs text-muted-foreground">
-                            Exclui só esta parcela
+                            Exclui só {idRecorrencia ? "este lançamento" : "esta parcela"}
                         </p>
                     </button>
 
@@ -97,7 +99,7 @@ export function DialogDeleteLancamento({
                     >
                         <span className="font-medium">Este e próximos</span>
                         <p className="text-xs text-muted-foreground">
-                            Exclui a partir desta parcela
+                            Exclui a partir {idRecorrencia ? "deste lançamento" : "desta parcela"}
                         </p>
                     </button>
 
@@ -106,9 +108,9 @@ export function DialogDeleteLancamento({
                         disabled={mutationDelete.isPending}
                         className="px-4 py-2 text-left rounded border hover:bg-destructive/20 transition-colors"
                     >
-                        <span className="font-medium text-destructive">Todas as parcelas</span>
+                        <span className="font-medium text-destructive">Todas as ocorrências</span>
                         <p className="text-xs text-muted-foreground">
-                            Exclui todo o parcelamento
+                            Exclui todo o {idRecorrencia ? "grupo recorrente" : "parcelamento"}
                         </p>
                     </button>
                 </div>

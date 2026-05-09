@@ -2,9 +2,9 @@
 
 import { useState, useMemo } from "react"
 import { useForm, Controller } from "react-hook-form"
-import { Categoria, useCategorias, useAddCategoria, useEditCategoria, useToggleCategoria } from "@/services/categorias"
+import { Categoria, useCategorias, useAddCategoria, useEditCategoria, useToggleCategoria, useDeleteCategoria } from "@/services/categorias"
 import { useQueryClient } from "@tanstack/react-query"
-import { Edit2Icon, EyeOffIcon, EyeIcon, PlusIcon, XIcon, CheckIcon, Search } from "lucide-react"
+import { Edit2Icon, EyeOffIcon, EyeIcon, PlusIcon, XIcon, CheckIcon, Search, TrashIcon } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,11 +28,13 @@ export default function CategoriasPage() {
     const addCategoria = useAddCategoria()
     const editCategoria = useEditCategoria()
     const toggleCategoria = useToggleCategoria()
+    const deleteCategoria = useDeleteCategoria()
 
     // States
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [editingId, setEditingId] = useState<number | null>(null)
     const [searchQuery, setSearchQuery] = useState("")
+    const [categoriaToDelete, setCategoriaToDelete] = useState<Categoria | null>(null)
 
 
     //create form
@@ -142,6 +144,18 @@ export default function CategoriasPage() {
     const cancelEdit = () => {
         setEditingId(null)
         resetEdit()
+    }
+
+    const handleDeleteCategoria = async () => {
+        if (!categoriaToDelete) return
+        try {
+            await deleteCategoria.mutateAsync(categoriaToDelete.id)
+            toast.success("Categoria excluída com sucesso!")
+            setCategoriaToDelete(null)
+            queryClient.invalidateQueries({ queryKey: ["categorias"] })
+        } catch (error) {
+            toast.error("Não foi possível excluir a categoria")
+        }
     }
 
     // Função para retornar o badge de tipo
@@ -323,6 +337,15 @@ export default function CategoriasPage() {
                                                             <EyeOffIcon className="h-4 w-4" />
                                                         )}
                                                     </Button>
+                                                    <Button
+                                                        onClick={() => setCategoriaToDelete(categoria)}
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        title="Excluir categoria"
+                                                        className="text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30"
+                                                    >
+                                                        <TrashIcon className="h-4 w-4" />
+                                                    </Button>
                                                 </div>
                                             </div>
                                         )}
@@ -407,6 +430,34 @@ export default function CategoriasPage() {
                                 </Button>
                             </DialogFooter>
                         </form>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Modal de Exclusão */}
+                <Dialog open={!!categoriaToDelete} onOpenChange={(open) => !open && setCategoriaToDelete(null)}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Excluir Categoria</DialogTitle>
+                            <DialogDescription>
+                                Tem certeza que deseja excluir a categoria <strong className="text-foreground">{categoriaToDelete?.nome}</strong>?
+                                <br /><br />
+                                <span className="text-muted-foreground">
+                                    Os lançamentos vinculados a esta categoria não serão excluídos, apenas ficarão sem categoria definida.
+                                </span>
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setCategoriaToDelete(null)}>
+                                Cancelar
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={handleDeleteCategoria}
+                                disabled={deleteCategoria.isPending}
+                            >
+                                {deleteCategoria.isPending ? "Excluindo..." : "Sim, Excluir Categoria"}
+                            </Button>
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
             </div>

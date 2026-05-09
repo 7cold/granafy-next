@@ -15,6 +15,7 @@ import { ChevronDownIcon } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
 import { useContas } from "@/services/contas"
 import { useCategorias } from "@/services/categorias"
+import { useCartoes } from "@/services/cartoes"
 import { toast } from "sonner"
 import { updateLancamento } from "@/services/lancamentos"
 import { useQueryClient } from "@tanstack/react-query"
@@ -29,6 +30,7 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
     const queryClient = useQueryClient()
     const { data: categorias } = useCategorias()
     const { data: contas } = useContas()
+    const { data: cartoes } = useCartoes()
     const { register, handleSubmit, control, reset, watch, formState: { errors } } = useForm();
     const tipoSelecionado = watch("tipo")
 
@@ -39,6 +41,7 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
                 data: lancamento.data ? new Date(lancamento.data) : new Date(),
                 categoria_id: lancamento.categoria_id?.toString() || "",
                 conta_id: lancamento.conta_id?.toString() || "",
+                id_cartao: lancamento.id_cartao?.toString() || "",
             });
         }
     }, [open, lancamento, reset]);
@@ -59,6 +62,9 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
                 toast.success("Lançamento atualizado com sucesso!")
                 queryClient.invalidateQueries({
                     queryKey: ["lancamentos"]
+                })
+                queryClient.invalidateQueries({
+                    queryKey: ["lancamentos-cartao"]
                 })
                 onOpenChange(false)
             })
@@ -143,40 +149,67 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
                                     <SelectContent>
                                         <SelectGroup>
                                             <SelectLabel>Categorias</SelectLabel>
-                                            {categorias?.filter((e) => e.ativo == true && e.tipo == (tipoSelecionado ?? "despesa")).map((cat) => (
-                                                <SelectItem key={cat.id} value={cat.id.toString()}>
-                                                    {cat.nome}
-                                                </SelectItem>
-                                            ))}
+                                            {categorias?.filter((e) => e.ativo == true && e.tipo == (tipoSelecionado ?? "despesa"))
+                                                .sort((a, b) => (a.nome ?? "").localeCompare(b.nome ?? ""))
+                                                .map((cat) => (
+                                                    <SelectItem key={cat.id} value={cat.id.toString()}>
+                                                        {cat.nome}
+                                                    </SelectItem>
+                                                ))}
                                         </SelectGroup>
                                     </SelectContent>
                                 </Select>
                             )}
                         />
-                        <Controller
-                            name="conta_id"
-                            rules={{ required: "Selecione a Conta" }}
-                            control={control}
-                            render={({ field: { onChange, value } }) => (
-                                <Select value={value} onValueChange={(val) => {
-                                    onChange(val);
-                                }}>
-                                    <SelectTrigger className="w-full max-w-100">
-                                        <SelectValue placeholder="Selecione a Conta" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectGroup>
-                                            <SelectLabel>Contas</SelectLabel>
-                                            {contas?.map((conta) => (
-                                                <SelectItem key={conta.id} value={conta.id.toString()}>
-                                                    {conta.nome}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectGroup>
-                                    </SelectContent>
-                                </Select>
-                            )}
-                        />
+                        {lancamento?.id_cartao ? (
+                            <Controller
+                                name="id_cartao"
+                                rules={{ required: "Selecione o Cartão" }}
+                                control={control}
+                                render={({ field: { onChange, value } }) => (
+                                    <Select value={value} onValueChange={onChange}>
+                                        <SelectTrigger className="w-full max-w-100">
+                                            <SelectValue placeholder="Selecione o Cartão" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectGroup>
+                                                <SelectLabel>Cartões</SelectLabel>
+                                                {cartoes?.map((cartao: any) => (
+                                                    <SelectItem key={cartao.id} value={cartao.id.toString()}>
+                                                        Cartão final {cartao.nome}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectGroup>
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            />
+                        ) : (
+                            <Controller
+                                name="conta_id"
+                                rules={{ required: "Selecione a Conta" }}
+                                control={control}
+                                render={({ field: { onChange, value } }) => (
+                                    <Select value={value} onValueChange={(val) => {
+                                        onChange(val);
+                                    }}>
+                                        <SelectTrigger className="w-full max-w-100">
+                                            <SelectValue placeholder="Selecione a Conta" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectGroup>
+                                                <SelectLabel>Contas</SelectLabel>
+                                                {contas?.map((conta) => (
+                                                    <SelectItem key={conta.id} value={conta.id.toString()}>
+                                                        {conta.nome}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectGroup>
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            />
+                        )}
                         <FieldLabel>
                             <Field orientation="horizontal">
                                 <Controller

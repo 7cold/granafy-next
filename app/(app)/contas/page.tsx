@@ -2,9 +2,9 @@
 
 import { useState, useMemo } from "react"
 import { useForm, Controller } from "react-hook-form"
-import { Conta, useContas, useAddConta, useEditConta, useToggleConta } from "@/services/contas"
+import { Conta, useContas, useAddConta, useEditConta, useToggleConta, useDeleteConta } from "@/services/contas"
 import { useQueryClient } from "@tanstack/react-query"
-import { Edit2Icon, EyeOffIcon, EyeIcon, PlusIcon, XIcon, CheckIcon, Search } from "lucide-react"
+import { Edit2Icon, EyeOffIcon, EyeIcon, PlusIcon, XIcon, CheckIcon, Search, TrashIcon } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,11 +28,13 @@ export default function ContasPage() {
     const addConta = useAddConta()
     const editConta = useEditConta()
     const toggleConta = useToggleConta()
+    const deleteConta = useDeleteConta()
 
     // States
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
     const [editingId, setEditingId] = useState<number | null>(null)
     const [searchQuery, setSearchQuery] = useState("")
+    const [contaToDelete, setContaToDelete] = useState<Conta | null>(null)
 
     //create form
     const {
@@ -138,6 +140,18 @@ export default function ContasPage() {
     const cancelEdit = () => {
         setEditingId(null)
         resetEdit()
+    }
+
+    const handleDeleteConta = async () => {
+        if (!contaToDelete) return
+        try {
+            await deleteConta.mutateAsync(contaToDelete.id)
+            toast.success("Conta e lançamentos vinculados excluídos com sucesso!")
+            setContaToDelete(null)
+            queryClient.invalidateQueries({ queryKey: ["contas"] })
+        } catch (error) {
+            toast.error("Não foi possível excluir a conta")
+        }
     }
 
     if (isLoading) {
@@ -300,6 +314,15 @@ export default function ContasPage() {
                                                             <EyeOffIcon className="h-4 w-4" />
                                                         )}
                                                     </Button>
+                                                    <Button
+                                                        onClick={() => setContaToDelete(conta)}
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        title="Excluir conta"
+                                                        className="text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30"
+                                                    >
+                                                        <TrashIcon className="h-4 w-4" />
+                                                    </Button>
                                                 </div>
                                             </div>
                                         )}
@@ -371,6 +394,37 @@ export default function ContasPage() {
                                 </Button>
                             </DialogFooter>
                         </form>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Modal de Exclusão */}
+                <Dialog open={!!contaToDelete} onOpenChange={(open) => !open && setContaToDelete(null)}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Excluir Conta</DialogTitle>
+                            <DialogDescription>
+                                Tem certeza que deseja excluir a conta <strong className="text-foreground">{contaToDelete?.nome}</strong>?
+                                <br /><br />
+                                <span className="text-destructive font-semibold">
+                                    Atenção: Isso irá apagar permanentemente todos os lançamentos vinculados a esta conta.
+                                </span>
+                                <br />
+                                <br />
+                                Esta ação não poderá ser desfeita.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setContaToDelete(null)}>
+                                Cancelar
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={handleDeleteConta}
+                                disabled={deleteConta.isPending}
+                            >
+                                {deleteConta.isPending ? "Excluindo..." : "Sim, Excluir Conta"}
+                            </Button>
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
             </div>

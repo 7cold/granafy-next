@@ -21,20 +21,60 @@ import {
     ChartTooltipContent,
     type ChartConfig,
 } from "@/components/ui/chart"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
+import { useContas } from "@/services/contas"
+import { supabase } from "@/lib/supabase"
 import { format, startOfMonth, setMonth } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
-function useResultadoAnual(apenasLancamentosPagos: boolean) {
+import { useLancamentosStore } from "@/store/lancamentosStore"
+import { useUser } from "@/hooks/useUser"
+import { useCartoes } from "@/services/cartoes"
+
+function useResultadoAnual(apenasLancamentosPagos: boolean, idsContas?: number[]) {
+    const { data: user } = useUser()
+    const { data: cartoes = [] } = useCartoes()
+
     return useQuery({
-        queryKey: ["relatorio-resultado-anual", apenasLancamentosPagos],
+        queryKey: ["relatorio-resultado-anual", apenasLancamentosPagos, idsContas, cartoes?.length, user?.email],
+        enabled: !!user?.email,
         queryFn: async () => {
             const hoje = new Date()
             const anoAtual = hoje.getFullYear()
             const mesAtual = hoje.getMonth()
 
-            const data = await getLancamentosFilter({
-                ano: anoAtual,
-            })
+            // Busca os lançamentos do ano com lógica de OR para contas e cartões
+            const dataInicioAno = `${anoAtual}-01-01`
+            const dataFimAno = `${anoAtual}-12-31`
+
+            let query = supabase
+                .from("lancamentos")
+                .select("*")
+                .eq("user", user?.email)
+                .gte("data", dataInicioAno)
+                .lte("data", dataFimAno)
+
+            if (idsContas && idsContas.length > 0) {
+                const idsCartoesRelacionados = cartoes
+                    .filter(c => c.id_conta && idsContas.includes(c.id_conta))
+                    .map(c => c.id)
+
+                let filterStr = `conta_id.in.(${idsContas.join(",")})`
+                if (idsCartoesRelacionados.length > 0) {
+                    filterStr += `,id_cartao.in.(${idsCartoesRelacionados.join(",")})`
+                }
+                query = query.or(filterStr)
+            }
+
+            const { data, error } = await query
+            if (error) throw error
 
             const meses = Array.from({ length: 12 }, (_, i) => {
                 const d = setMonth(startOfMonth(new Date(anoAtual, 0)), i)
@@ -49,13 +89,30 @@ function useResultadoAnual(apenasLancamentosPagos: boolean) {
 
             const lancamentos = (data ?? []).filter((l) => {
                 if (!apenasLancamentosPagos) return true
-                // entradas sempre contam; só filtra despesas não pagas
                 if (l.valor > 0) return true
                 return l.pago === true
             })
 
             for (const l of lancamentos) {
-                const chave = l.data?.slice(0, 7)
+                let dataFinanceira = l.data;
+
+                // Lógica de Teletransporte para Cartão (Resultado Anual)
+                if (l.id_cartao) {
+                    const c = cartoes.find(card => card.id === l.id_cartao);
+                    if (c) {
+                        const d = new Date(l.data + 'T00:00:00');
+                        const diaCompra = d.getDate();
+                        const mesCompra = d.getMonth();
+                        const anoCompra = d.getFullYear();
+
+                        // Se a compra foi após o fechamento, vence no mês M+2
+                        let mesVencimento = mesCompra + (diaCompra <= (c.dia_fechamento || 28) ? 1 : 2);
+                        const targetDate = new Date(anoCompra, mesVencimento, c.dia_vencimento || 1);
+                        dataFinanceira = format(targetDate, 'yyyy-MM-dd');
+                    }
+                }
+
+                const chave = dataFinanceira.slice(0, 7)
                 const m = meses.find((m) => m.chave === chave)
                 if (m) m.saldo += l.valor
             }
@@ -66,6 +123,7 @@ function useResultadoAnual(apenasLancamentosPagos: boolean) {
                 return { ...m, saldo: acumulado }
             })
         },
+        staleTime: 1000 * 60 * 5,
     })
 }
 
@@ -79,8 +137,13 @@ const chartConfig = {
 
 export function ResultadoAnualCard() {
     const [apenasLancamentosPagos, setApenasLancamentosPagos] = useState(false)
+    const { setMes, setAno } = useLancamentosStore()
+    const contasSelecionadasGlobal = useLancamentosStore((s) => s.contasSelecionadas)
+    const [contaId, setContaId] = useState<number | null>(contasSelecionadasGlobal?.[0]?.id ?? null)
+    const { data: contas } = useContas()
 
-    const { data: meses, isLoading } = useResultadoAnual(apenasLancamentosPagos)
+    const idsContas = contaId ? [contaId] : []
+    const { data: meses, isLoading } = useResultadoAnual(apenasLancamentosPagos, idsContas)
 
     const hoje = new Date()
     const mesAtualIndex = hoje.getMonth()
@@ -114,14 +177,33 @@ export function ResultadoAnualCard() {
                     </div>
                     <div className="flex items-center gap-2 pt-1">
                         <Checkbox
-                            id="apenas-pagos"
+                            id="apenas-pagos-anual"
                             checked={apenasLancamentosPagos}
                             onCheckedChange={(v) => setApenasLancamentosPagos(Boolean(v))}
                         />
-                        <Label htmlFor="apenas-pagos" className="text-sm text-muted-foreground cursor-pointer whitespace-nowrap">
+                        <Label htmlFor="apenas-pagos-anual" className="text-sm text-muted-foreground cursor-pointer whitespace-nowrap">
                             Apenas pagos
                         </Label>
                     </div>
+                </div>
+
+                <div className="mt-4">
+                    <Select
+                        value={contaId?.toString() ?? "todas"}
+                        onValueChange={(v) => setContaId(v === "todas" ? null : Number(v))}
+                    >
+                        <SelectTrigger className="w-full md:w-64">
+                            <SelectValue placeholder="Todas as contas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="todas">Todas as contas</SelectItem>
+                            {(contas ?? []).map((c) => (
+                                <SelectItem key={c.id} value={c.id.toString()}>
+                                    {c.nome}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
             </CardHeader>
 
@@ -132,11 +214,21 @@ export function ResultadoAnualCard() {
                     </div>
                 ) : (
                     <ChartContainer config={chartConfig}
-                        className="h-50 w-full"
+                        className="h-50 w-full cursor-pointer"
                     >
                         <LineChart
                             accessibilityLayer
                             data={meses}
+                            onMouseDown={(e) => {
+                                if (e && e.activeTooltipIndex !== undefined) {
+                                    const dataPoint = meses[e.activeTooltipIndex];
+                                    if (dataPoint) {
+                                        const [y, m] = dataPoint.chave.split("-");
+                                        setMes(Number(m));
+                                        setAno(Number(y));
+                                    }
+                                }
+                            }}
                         >
                             <CartesianGrid vertical={false} />
                             <XAxis

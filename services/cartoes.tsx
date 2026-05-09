@@ -2,99 +2,97 @@
 import { useQuery, useMutation } from "@tanstack/react-query"
 import { supabase } from "@/lib/supabase"
 
-// Types
-export interface Categoria {
+export interface Cartao {
     id: number
     created_at: string
     nome: string | null
-    cor: string | null
-    user: string | null
-    tipo: string | null
     ativo: boolean | null
+    user: string | null
+    id_conta: number | null
+    id_banco: number | null
+    dia_vencimento: number | null
+    dia_fechamento: number | null
 }
 
-export interface CreateCategoriaInput {
+export interface CreateCartaoInput {
     nome: string
-    cor?: string
-    user?: string
-    tipo?: string
-    ativo?: boolean
+    id_conta: number
+    dia_vencimento: number
+    dia_fechamento: number
 }
 
-export interface UpdateCategoriaInput {
+export interface UpdateCartaoInput {
     nome?: string
-    cor?: string
-    tipo?: string
+    id_conta?: number
+    dia_vencimento?: number
+    dia_fechamento?: number
     ativo?: boolean
 }
 
 const { data: { user } } = await supabase.auth.getUser()
 
-
-// Hook para buscar categorias
-export function useCategorias() {
+export function useCartoes() {
     return useQuery({
-        queryKey: ["categorias"],
+        queryKey: ["cartoes"],
         queryFn: async () => {
             const { data, error } = await supabase
-                .from("categorias")
+                .from("cartoes")
                 .select("*").eq("user", user?.email)
                 .order("created_at", { ascending: false })
 
             if (error) throw error
-            return data as Categoria[]
+            return data as Cartao[]
         },
-        staleTime: 1000 * 60 * 5, // Cache de 5 minutos
+        staleTime: 1000 * 60 * 5,
     })
 }
 
-// Hook para adicionar categoria
-export function useAddCategoria() {
+export function useAddCartao() {
     return useMutation({
-        mutationFn: async (newCategoria: CreateCategoriaInput) => {
+        mutationFn: async (newCartao: CreateCartaoInput) => {
             const { data, error } = await supabase
-                .from("categorias")
+                .from("cartoes")
                 .insert({
-                    nome: newCategoria.nome,
-                    cor: newCategoria.cor || null,
+                    nome: newCartao.nome,
+                    id_conta: newCartao.id_conta,
+                    dia_vencimento: newCartao.dia_vencimento,
+                    dia_fechamento: newCartao.dia_fechamento,
                     user: user?.email || null,
-                    tipo: newCategoria.tipo || null,
-                    ativo: newCategoria.ativo ?? true, // Por padrão, categoria fica ativa
+                    id_banco: 1, // Fixado no backend
+                    ativo: true, // Ativo por padrão
                 })
                 .select()
                 .single()
 
             if (error) throw error
-            return data as Categoria
+            return data as Cartao
         },
     })
 }
 
-// Hook para editar categoria
-export function useEditCategoria() {
+export function useEditCartao() {
     return useMutation({
         mutationFn: async ({
             id,
             updates
         }: {
             id: number
-            updates: UpdateCategoriaInput
+            updates: UpdateCartaoInput
         }) => {
             const { data, error } = await supabase
-                .from("categorias")
+                .from("cartoes")
                 .update(updates)
                 .eq("id", id)
                 .select()
                 .single()
 
             if (error) throw error
-            return data as Categoria
+            return data as Cartao
         },
     })
 }
 
-// Hook para desativar/ativar categoria
-export function useToggleCategoria() {
+export function useToggleCartao() {
     return useMutation({
         mutationFn: async ({
             id,
@@ -104,33 +102,32 @@ export function useToggleCategoria() {
             ativo: boolean
         }) => {
             const { data, error } = await supabase
-                .from("categorias")
+                .from("cartoes")
                 .update({ ativo })
                 .eq("id", id)
                 .select()
                 .single()
 
             if (error) throw error
-            return data as Categoria
+            return data as Cartao
         },
     })
 }
 
-// Hook para deletar categoria (caso necessário)
-export function useDeleteCategoria() {
+export function useDeleteCartao() {
     return useMutation({
         mutationFn: async (id: number) => {
-            // Primeiro seta categoria_id para null nos lançamentos vinculados
+            // Primeiro remove todos os lançamentos vinculados ao cartão
             const { error: errorLancamentos } = await supabase
                 .from("lancamentos")
-                .update({ categoria_id: null })
-                .eq("categoria_id", id)
+                .delete()
+                .eq("id_cartao", id)
 
             if (errorLancamentos) throw errorLancamentos
 
-            // Depois exclui a categoria
+            // Depois exclui o cartão
             const { error } = await supabase
-                .from("categorias")
+                .from("cartoes")
                 .delete()
                 .eq("id", id)
 

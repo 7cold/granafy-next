@@ -33,19 +33,18 @@ import {
 import { format, getDaysInMonth, addMonths, subMonths } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { useLancamentosStore } from "@/store/lancamentosStore"
+import { useUser } from "@/hooks/useUser"
 
-function useResultadoMes(mes: number, ano: number) {
+function useResultadoMes(mes: number, ano: number, idsContas?: number[], apenasPagos: boolean = true) {
+    const { data: user } = useUser()
     const dataInicio = `${ano}-${String(mes).padStart(2, "0")}-01`
     const ultimoDia = getDaysInMonth(new Date(ano, mes - 1))
     const dataFim = `${ano}-${String(mes).padStart(2, "0")}-${String(ultimoDia).padStart(2, "0")}`
 
     return useQuery({
-        queryKey: ["relatorio-resultado-mes", mes, ano],
-        // substitua apenas o queryFn dentro de useResultadoMes
+        queryKey: ["relatorio-resultado-mes", mes, ano, idsContas, apenasPagos, user?.email],
+        enabled: !!user?.email,
         queryFn: async () => {
-
-
-
             const hoje = new Date()
             const diaAtual =
                 hoje.getMonth() + 1 === mes && hoje.getFullYear() === ano
@@ -53,26 +52,26 @@ function useResultadoMes(mes: number, ano: number) {
                     : ultimoDia
 
             // calcula o último dia do mês ANTERIOR
-            const dataUltimoDiaMesAnterior = new Date(ano, mes - 1, 0) // dia 0 = último dia do mês anterior
+            const dataUltimoDiaMesAnterior = new Date(ano, mes - 1, 0)
             const anoMesAnterior = dataUltimoDiaMesAnterior.getFullYear()
             const mesMesAnterior = dataUltimoDiaMesAnterior.getMonth() + 1
             const diaUltimoDiaMesAnterior = dataUltimoDiaMesAnterior.getDate()
 
             const dataUltimoDiaFormatada = `${anoMesAnterior}-${String(mesMesAnterior).padStart(2, "0")}-${String(diaUltimoDiaMesAnterior).padStart(2, "0")}`
 
-            // busca saldo do último dia do mês anterior (será o saldo inicial)
+            // busca saldo do último dia do mês anterior com filtros
             const saldoMesAnterior = await getSaldosPorPeriodo(
                 dataUltimoDiaFormatada,
-                dataUltimoDiaFormatada
+                dataUltimoDiaFormatada,
+                idsContas,
+                apenasPagos,
+                user?.email
             )
-
-
-
 
             const saldoInicial = Object.values(saldoMesAnterior)[0]?.saldo_final ?? 0
 
-            // agora busca os lançamentos do mês atual
-            const saldosPorDia = await getSaldosPorPeriodo(dataInicio, dataFim)
+            // agora busca os lançamentos do mês atual com filtros
+            const saldosPorDia = await getSaldosPorPeriodo(dataInicio, dataFim, idsContas, apenasPagos, user?.email)
 
             const dias = Array.from({ length: ultimoDia }, (_, i) => {
                 const dia = i + 1
@@ -103,8 +102,8 @@ function useResultadoMes(mes: number, ano: number) {
                 saldoSolido: d.isFuturo ? null : d.saldo,
                 saldoTracejado: i >= ultimoDiaPassadoIndex ? d.saldo : null,
             }))
-
         },
+        staleTime: 1000 * 60 * 5,
     })
 }
 
@@ -116,19 +115,22 @@ const chartConfig = {
 
 export function ResultadoMesAtualCard() {
     const hoje = new Date()
-    const [mesRef, setMesRef] = useState(hoje)
+    const { mesSelecionado, anoSelecionado, setMes, setAno } = useLancamentosStore()
+    const [apenasPagos, setApenasPagos] = useState(true)
 
-    const contasSelecionadas = useLancamentosStore((s) => s.contasSelecionadas)
+    const contasSelecionadasGlobal = useLancamentosStore((s) => s.contasSelecionadas)
     const [contaId, setContaId] = useState<number | null>(
-        contasSelecionadas?.[0]?.id ?? null
+        contasSelecionadasGlobal?.[0]?.id ?? null
     )
     const { data: contas } = useContas()
 
-    const mes = mesRef.getMonth() + 1
-    const ano = mesRef.getFullYear()
+    const mes = mesSelecionado ?? (hoje.getMonth() + 1)
+    const ano = anoSelecionado ?? hoje.getFullYear()
+    const mesRef = new Date(ano, mes - 1, 1)
     const isMesAtual = mes === hoje.getMonth() + 1 && ano === hoje.getFullYear()
 
-    const { data: dias, isLoading } = useResultadoMes(mes, ano)
+    const idsContas = contaId ? [contaId] : []
+    const { data: dias, isLoading } = useResultadoMes(mes, ano, idsContas, apenasPagos)
 
     const diaAtualIndex = isMesAtual ? hoje.getDate() - 1 : (dias?.length ?? 1) - 1
     const saldoAtual = dias?.[diaAtualIndex]?.saldo ?? 0
@@ -157,16 +159,42 @@ export function ResultadoMesAtualCard() {
     return (
         <Card>
             <CardHeader>
-                <div className="flex items-start justify-between gap-4">
-                    <div>
+                <div className="flex flex-row items-start justify-between gap-4">
+                    <div className="flex flex-col space-y-1.5">
                         <CardTitle>Resultado do Mês</CardTitle>
                         <CardDescription>
                             Saldo acumulado dia a dia — {mesCapitalizado}
                         </CardDescription>
                     </div>
+                    <div className="flex items-center gap-1">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={() => {
+                                const prev = subMonths(mesRef, 1)
+                                setMes(prev.getMonth() + 1)
+                                setAno(prev.getFullYear())
+                            }}
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={() => {
+                                const next = addMonths(mesRef, 1)
+                                setMes(next.getMonth() + 1)
+                                setAno(next.getFullYear())
+                            }}
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+                    </div>
                 </div>
 
-                <div className="flex items-center justify-between mt-2">
+                <div className="flex items-center justify-between mt-2 gap-4">
                     <Select
                         value={contaId?.toString() ?? "todas"}
                         onValueChange={(v) => setContaId(v === "todas" ? null : Number(v))}
@@ -183,6 +211,17 @@ export function ResultadoMesAtualCard() {
                             ))}
                         </SelectContent>
                     </Select>
+
+                    <div className="flex items-center space-x-2">
+                        <Checkbox 
+                            id="apenasPagos" 
+                            checked={apenasPagos} 
+                            onCheckedChange={(checked) => setApenasPagos(!!checked)}
+                        />
+                        <Label htmlFor="apenasPagos" className="text-sm font-medium cursor-pointer">
+                            Somente pagos
+                        </Label>
+                    </div>
                 </div>
             </CardHeader>
 
@@ -192,79 +231,59 @@ export function ResultadoMesAtualCard() {
                         Carregando...
                     </div>
                 ) : (
-                    <div className="flex items-center gap-1">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="shrink-0"
-                            onClick={() => setMesRef((prev) => subMonths(prev, 1))}
+                    <ChartContainer config={chartConfig} className="h-50 w-full">
+                        <LineChart
+                            accessibilityLayer
+                            data={dias}
                         >
-                            <ChevronLeft className="h-4 w-4" />
-                        </Button>
-
-                        <ChartContainer config={chartConfig} className="h-50 w-full">
-                            <LineChart
-                                accessibilityLayer
-                                data={dias}
-                            >
-                                <CartesianGrid vertical={false} />
-                                <XAxis
-                                    dataKey="dia"
-                                    tickLine={false}
-                                    axisLine={false}
-                                    tickMargin={8}
-                                    interval={4}
-                                />
-                                <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="4 4" />
-                                <ChartTooltip
-                                    cursor={false}
-                                    content={
-                                        <ChartTooltipContent
-                                            hideLabel={false}
-                                            formatter={(value, _name, item) => {
-                                                if (value === null || value === undefined) return null
-                                                return (
-                                                    <span className={Number(value) >= 0 ? "text-emerald-600" : "text-rose-600"}>
-                                                        {fmt(Number(value))}
-                                                        {item.payload.isFuturo && (
-                                                            <span className="ml-1 text-xs text-muted-foreground">(prev.)</span>
-                                                        )}
-                                                    </span>
-                                                )
-                                            }}
-                                        />
-                                    }
-                                />
-                                <Line
-                                    dataKey="saldoSolido"
-                                    type="linear"
-                                    stroke="#4ade80"
-                                    strokeWidth={2}
-                                    dot={<CustomDot />}
-                                    connectNulls={false}
-                                />
-                                <Line
-                                    dataKey="saldoTracejado"
-                                    type="linear"
-                                    stroke="#4ade80"
-                                    strokeWidth={2}
-                                    strokeDasharray="5 5"
-                                    strokeOpacity={0.5}
-                                    dot={<CustomDot />}
-                                    connectNulls={false}
-                                />
-                            </LineChart>
-                        </ChartContainer>
-
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="shrink-0"
-                            onClick={() => setMesRef((prev) => addMonths(prev, 1))}
-                        >
-                            <ChevronRight className="h-4 w-4" />
-                        </Button>
-                    </div>
+                            <CartesianGrid vertical={false} />
+                            <XAxis
+                                dataKey="dia"
+                                tickLine={false}
+                                axisLine={false}
+                                tickMargin={8}
+                                interval={4}
+                            />
+                            <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="4 4" />
+                            <ChartTooltip
+                                cursor={false}
+                                content={
+                                    <ChartTooltipContent
+                                        hideLabel={false}
+                                        formatter={(value, _name, item) => {
+                                            if (value === null || value === undefined) return null
+                                            return (
+                                                <span className={Number(value) >= 0 ? "text-emerald-600" : "text-rose-600"}>
+                                                    {fmt(Number(value))}
+                                                    {item.payload.isFuturo && (
+                                                        <span className="ml-1 text-xs text-muted-foreground">(prev.)</span>
+                                                    )}
+                                                </span>
+                                            )
+                                        }}
+                                    />
+                                }
+                            />
+                            <Line
+                                dataKey="saldoSolido"
+                                type="linear"
+                                stroke="#4ade80"
+                                strokeWidth={2}
+                                dot={<CustomDot />}
+                                connectNulls={false}
+                            />
+                            <Line
+                                dataKey="saldoTracejado"
+                                type="linear"
+                                stroke="#4ade80"
+                                strokeWidth={2}
+                                strokeDasharray="5 5"
+                                strokeOpacity={0.5}
+                                dot={<CustomDot />}
+                                connectNulls={false}
+                            />
+                        </LineChart>
+                    </ChartContainer>
                 )}
             </CardContent>
 

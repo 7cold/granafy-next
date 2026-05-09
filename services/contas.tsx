@@ -119,6 +119,15 @@ export function useToggleConta() {
 export function useDeleteConta() {
     return useMutation({
         mutationFn: async (id: number) => {
+            // Primeiro remove todos os lançamentos vinculados à conta
+            const { error: errorLancamentos } = await supabase
+                .from("lancamentos")
+                .delete()
+                .eq("conta_id", id)
+
+            if (errorLancamentos) throw errorLancamentos
+
+            // Depois exclui a conta
             const { error } = await supabase
                 .from("contas")
                 .delete()

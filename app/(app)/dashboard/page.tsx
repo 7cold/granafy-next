@@ -15,70 +15,84 @@ import { FluxoCard } from "@/components/layout/fluxo-card"
 import { ResultadoAnualCard } from "@/components/layout/fluxo-card-anual"
 import { ResultadoMesAtualCard } from "@/components/layout/fluxo-card-mes"
 import { CategoriasMesCard } from "@/components/layout/fluxo-card-piechart"
+import { Loader } from "@/components/ui/loader"
+import { useState, useEffect } from "react"
+import { useUser } from "@/hooks/useUser"
 
 
-function ResumoCards() {
+function ResumoCards({ 
+    onLoadingChange,
+    userEmail 
+}: { 
+    onLoadingChange: (loading: boolean) => void,
+    userEmail?: string 
+}) {
     const hoje = new Date()
     const mesInicio = format(startOfMonth(hoje), "yyyy-MM-dd")
     const mesFim = format(endOfMonth(hoje), "yyyy-MM-dd")
 
-    // busca saldo total (até hoje, todos os lançamentos pagos)
-    const { data: saldoTotal } = useQuery({
-        queryKey: ["saldo-total"],
+    const { data: saldoTotal, isLoading: loadTotal } = useQuery({
+        queryKey: ["saldo-total", userEmail],
         queryFn: async () => {
-
             const { supabase } = await import("@/lib/supabase")
-
-
-            const { data: { user } } = await supabase.auth.getUser()
             const { data } = await supabase
                 .from("lancamentos")
                 .select("valor")
                 .eq("pago", true)
-                .eq("user", user?.email)
+                .eq("user", userEmail)
 
             return (data ?? []).reduce((acc, l) => acc + (l.valor || 0), 0)
         },
+        enabled: !!userEmail,
+        staleTime: 1000 * 60 * 5,
     })
 
-    // busca entradas do mês
-    const { data: entradasMes } = useQuery({
-        queryKey: ["entradas-mes", mesInicio, mesFim],
+    const { data: entradasMes, isLoading: loadEntradas } = useQuery({
+        queryKey: ["entradas-mes", mesInicio, mesFim, userEmail],
         queryFn: async () => {
             const { supabase } = await import("@/lib/supabase")
-            const { data: { user } } = await supabase.auth.getUser()
             const { data } = await supabase
                 .from("lancamentos")
                 .select("valor")
                 .eq("pago", true)
                 .gte("data", mesInicio)
                 .lte("data", mesFim)
-                .gt("valor", 0).eq("user", user?.email)
+                .gt("valor", 0).eq("user", userEmail)
 
             return (data ?? []).reduce((acc, l) => acc + (l.valor || 0), 0)
         },
+        enabled: !!userEmail,
+        staleTime: 1000 * 60 * 5,
     })
 
-    // busca saídas do mês
-    const { data: saidasMes } = useQuery({
-        queryKey: ["saidas-mes", mesInicio, mesFim],
+    const { data: saidasMes, isLoading: loadSaidas } = useQuery({
+        queryKey: ["saidas-mes", mesInicio, mesFim, userEmail],
         queryFn: async () => {
             const { supabase } = await import("@/lib/supabase")
-            const { data: { user } } = await supabase.auth.getUser()
             const { data } = await supabase
                 .from("lancamentos")
                 .select("valor")
                 .eq("pago", true)
                 .gte("data", mesInicio)
                 .lte("data", mesFim)
-                .lt("valor", 0).eq("user", user?.email)
+                .lt("valor", 0).eq("user", userEmail)
 
             return Math.abs((data ?? []).reduce((acc, l) => acc + (l.valor || 0), 0))
         },
+        enabled: !!userEmail,
+        staleTime: 1000 * 60 * 5,
     })
+
+    const isLoading = loadTotal || loadEntradas || loadSaidas
+
+    useEffect(() => {
+        onLoadingChange(isLoading)
+    }, [isLoading, onLoadingChange])
 
     const fmt = (v: number | undefined) =>
         (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+
+    if (isLoading) return null
 
     return (
         <div className="grid gap-4 md:grid-cols-3">
@@ -134,6 +148,9 @@ function ResumoCards() {
 }
 
 export default function DashboardPage() {
+    const [loading, setLoading] = useState(true)
+    const { data: user } = useUser()
+
     return (
         <>
             <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
@@ -141,28 +158,30 @@ export default function DashboardPage() {
             </header>
 
             <div className="flex flex-1 flex-col gap-4 p-4">
-                {/* Row 1: Cards resumo dinâmico */}
-                <ResumoCards />
-
-                {/* Row 2: Fluxo 6 meses */}
-                <div>
-                    <FluxoCard />
+                {/* Sempre renderiza o ResumoCards (invisível se estiver carregando) para disparar as queries */}
+                <div className={loading ? "hidden" : "contents"}>
+                    <ResumoCards onLoadingChange={setLoading} userEmail={user?.email} />
                 </div>
 
-                {/* Row 3: Resultado anual + Categorias do mês */}
-                <div className="grid gap-4 lg:grid-cols-3">
-                    <div className="lg:col-span-2">
-                        <ResultadoAnualCard />
+                {loading ? (
+                    <Loader />
+                ) : (
+                    <div className="flex flex-1 flex-col gap-4 animate-in fade-in duration-500">
+                        {/* Row 2: Fluxo 6 meses */}
+                        <div>
+                            <FluxoCard />
+                        </div>
+
+                        <div className="lg:col-span-2">
+                            <ResultadoAnualCard />
+                        </div>
+
+                        {/* Row 4: Resultado do mês atual */}
+                        <div>
+                            <ResultadoMesAtualCard />
+                        </div>
                     </div>
-                    <div>
-                        <CategoriasMesCard />
-                    </div>
-                </div>
-
-                {/* Row 4: Resultado do mês atual */}
-                <div>
-                    <ResultadoMesAtualCard />
-                </div>
+                )}
             </div>
         </>
     )

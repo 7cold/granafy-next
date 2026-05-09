@@ -8,9 +8,9 @@ export type SaldoDia = {
     saldo_final: number
 }
 
-export function useSaldosPorDia(dataInicio: string, dataFim: string) {
+export function useSaldosPorDia(dataInicio: string, dataFim: string, idsContas?: number[]) {
     return useQuery({
-        queryKey: ['saldos-por-dia', dataInicio, dataFim],
+        queryKey: ['saldos-por-dia', dataInicio, dataFim, idsContas],
         queryFn: async () => {
             const { data: { user } } = await supabase.auth.getUser()
 
@@ -18,6 +18,8 @@ export function useSaldosPorDia(dataInicio: string, dataFim: string) {
                 data_inicio: dataInicio,
                 data_fim: dataFim,
                 user_email: user?.email,
+                ids_contas: idsContas && idsContas.length > 0 ? idsContas : null,
+                apenas_pagos: true // No DataTable sempre mostramos apenas o saldo real (pago)
             })
             if (error) throw error
 

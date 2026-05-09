@@ -13,34 +13,46 @@ export async function getLancamentos() {
 export async function getLancamentosFilter({
     idsContas,
     mes,
-    ano
+    ano,
+    ignorarCartao = true,
+    userEmail
 }: {
     idsContas?: number[]
     mes?: number | null
     ano?: number | null
+    ignorarCartao?: boolean
+    userEmail?: string
 }) {
+    let email = userEmail
 
-    const { supabase } = await import("@/lib/supabase")
-    const { data: { user } } = await supabase.auth.getUser()
+    if (!email) {
+        const { data: { user } } = await supabase.auth.getUser()
+        email = user?.email
+    }
 
     let query = supabase
         .from("lancamentos")
-        .select("*").eq("user", user?.email)
+        .select("*").eq("user", email)
+    
+    if (ignorarCartao) {
+        query = query.is("id_cartao", null)
+    }
 
     const temContaSelecionada = idsContas && idsContas.length > 0
 
     if (temContaSelecionada) {
         query = query.in("conta_id", idsContas)
-        if (mes && ano) {
-            const dataInicio = `${ano}-${String(mes).padStart(2, "0")}-01`
-            const dataFim =
-                mes === 12
-                    ? `${ano + 1}-01-01`
-                    : `${ano}-${String(mes + 1).padStart(2, "0")}-01`
-            query = query
-                .gte("data", dataInicio)
-                .lt("data", dataFim)
-        }
+    }
+
+    if (mes && ano) {
+        const dataInicio = `${ano}-${String(mes).padStart(2, "0")}-01`
+        const dataFim =
+            mes === 12
+                ? `${ano + 1}-01-01`
+                : `${ano}-${String(mes + 1).padStart(2, "0")}-01`
+        query = query
+            .gte("data", dataInicio)
+            .lt("data", dataFim)
     }
 
     const { data, error } = await query.order("data", { ascending: false })
@@ -52,14 +64,19 @@ export async function getLancamentosFilter({
 
 export async function getLancamentosComCategoria({
     mes,
-    ano
+    ano,
+    userEmail
 }: {
     mes: number
     ano: number
+    userEmail?: string
 }) {
+    let email = userEmail
 
-    const { supabase } = await import("@/lib/supabase")
-    const { data: { user } } = await supabase.auth.getUser()
+    if (!email) {
+        const { data: { user } } = await supabase.auth.getUser()
+        email = user?.email
+    }
 
     const dataInicio = `${ano}-${String(mes).padStart(2, "0")}-01`
     const dataFim =
@@ -72,7 +89,7 @@ export async function getLancamentosComCategoria({
             supabase
                 .from("lancamentos")
                 .select("*")
-                .eq("user", user?.email)
+                .eq("user", email)
                 .gte("data", dataInicio)
                 .lt("data", dataFim)
                 .order("data", { ascending: false }),
@@ -99,17 +116,24 @@ export async function createLancamento(data: {
     descricao: string
     valor: number
     categoria_id: string
-    conta_id: string
+    conta_id?: string | null
+    id_cartao?: string | null
     pago: boolean
     data: Date
     user?: string
     parcelas?: number
+    recorrente?: boolean
 }) {
     const { data: { user } } = await supabase.auth.getUser()
-    const parcelas = data.parcelas && data.parcelas > 1 ? data.parcelas : 1
+    let parcelas = 1
+    if (data.recorrente) {
+        parcelas = 60
+    } else if (data.parcelas && data.parcelas > 1) {
+        parcelas = data.parcelas
+    }
 
     // gera um ID único para agrupar as parcelas (timestamp + random)
-    const idParcelamento = parcelas > 1
+    const idAgrupamento = parcelas > 1
         ? Math.floor(Date.now() * 1000 + Math.random() * 1000)
         : null
 
@@ -119,18 +143,20 @@ export async function createLancamento(data: {
 
         return {
             tipo: data.tipo,
-            descricao: parcelas > 1
+            descricao: (!data.recorrente && parcelas > 1)
                 ? `${data.descricao} (${i + 1}/${parcelas})`
                 : data.descricao,
             valor: data.tipo === "despesa"
                 ? -Math.abs(data.valor)
                 : Math.abs(data.valor),
             categoria_id: data.categoria_id,
-            conta_id: data.conta_id,
+            conta_id: data.conta_id || null,
+            id_cartao: data.id_cartao || null,
             pago: i === 0 ? data.pago : false,
             user: user?.email,
             data: format(dataVencimento, "yyyy-MM-dd"),
-            id_parcelamento: idParcelamento,
+            id_parcelamento: data.recorrente ? null : idAgrupamento,
+            id_recorrencia: data.recorrente ? idAgrupamento : null,
         }
     })
 
@@ -144,7 +170,8 @@ export async function updateLancamento(data: {
     descricao: string
     valor: number
     categoria_id: string
-    conta_id: string
+    conta_id?: string
+    id_cartao?: string
     pago: boolean
     data: Date
 }) {
@@ -160,7 +187,8 @@ export async function updateLancamento(data: {
                 ? -Math.abs(data.valor)
                 : Math.abs(data.valor),
             categoria_id: Number(data.categoria_id),
-            conta_id: Number(data.conta_id),
+            conta_id: data.conta_id ? Number(data.conta_id) : null,
+            id_cartao: data.id_cartao ? Number(data.id_cartao) : null,
             pago: data.pago,
             data: data.data ? new Date(data.data).toISOString() : null
         })
@@ -172,9 +200,13 @@ export async function updateLancamento(data: {
 export async function deleteLancamentoComOpcao(
     id: number,
     opcao: "apenas_este" | "este_e_proximos" | "todos",
-    idParcelamento?: number | null
+    idParcelamento?: number | null,
+    idRecorrencia?: number | null
 ) {
-    if (!idParcelamento || opcao === "apenas_este") {
+    const agrupamentoColuna = idRecorrencia ? "id_recorrencia" : "id_parcelamento"
+    const idAgrupamento = idRecorrencia || idParcelamento
+
+    if (!idAgrupamento || opcao === "apenas_este") {
         // sem parcelamento ou apaga só este
         const { error } = await supabase
             .from("lancamentos")
@@ -185,35 +217,98 @@ export async function deleteLancamentoComOpcao(
     }
 
     if (opcao === "todos") {
-        // apaga todos do grupo de parcelamento
+        // apaga todos do grupo de parcelamento/recorrência
         const { error } = await supabase
             .from("lancamentos")
             .delete()
-            .eq("id_parcelamento", idParcelamento)
+            .eq(agrupamentoColuna, idAgrupamento)
         if (error) throw error
         return
     }
 
     if (opcao === "este_e_proximos") {
-        // busca o número da parcela atual e deleta ele + os próximos
+        // busca a data da parcela atual e deleta ela + os próximos
         const { data: lancamento } = await supabase
             .from("lancamentos")
-            .select("descricao")
+            .select("data")
             .eq("id", id)
             .single()
 
         if (!lancamento) throw new Error("Lançamento não encontrado")
 
-        // extrai o número da parcela da descrição (ex: "Aluguel (3/12)" → 3)
-        const match = lancamento.descricao?.match(/\((\d+)\/\d+\)/)
-        const numeroAtual = match ? parseInt(match[1]) : 1
-
         const { error } = await supabase
             .from("lancamentos")
             .delete()
-            .eq("id_parcelamento", idParcelamento)
-            .gte("descricao", "") // workaround: fetch todos, depois deleta via loop
+            .eq(agrupamentoColuna, idAgrupamento)
+            .gte("data", lancamento.data)
 
         if (error) throw error
     }
+}
+
+export async function getLancamentosCartao({
+    cartaoId, mes, ano, diaFechamento
+}: { cartaoId: number, mes: number, ano: number, diaFechamento: number }) {
+    
+    // A fatura que VENCE em Junho, FECHA em Maio.
+    // Então os lançamentos são de Abril (diaFechamento) até Maio (diaFechamento).
+    let mesFim = mes - 1
+    let anoFim = ano
+    if (mesFim < 1) {
+        mesFim = 12
+        anoFim = ano - 1
+    }
+
+    let mesInicio = mesFim - 1
+    let anoInicio = anoFim
+    if (mesInicio < 1) {
+        mesInicio = 12
+        anoInicio = anoFim - 1
+    }
+    
+    const dataInicio = `${anoInicio}-${String(mesInicio).padStart(2, "0")}-${String(diaFechamento).padStart(2, "0")}`
+    const dataFim = `${anoFim}-${String(mesFim).padStart(2, "0")}-${String(diaFechamento).padStart(2, "0")}`
+
+    const { data, error } = await supabase
+        .from("lancamentos")
+        .select("*")
+        .eq("id_cartao", cartaoId)
+        .gte("data", dataInicio)
+        .lt("data", dataFim)
+        .order("data", { ascending: true })
+
+    if (error) throw error
+    return data
+}
+
+export async function pagarFaturaCartao({
+    cartaoId, mes, ano, diaFechamento
+}: { cartaoId: number, mes: number, ano: number, diaFechamento: number }) {
+    let mesFim = mes - 1
+    let anoFim = ano
+    if (mesFim < 1) {
+        mesFim = 12
+        anoFim = ano - 1
+    }
+
+    let mesInicio = mesFim - 1
+    let anoInicio = anoFim
+    if (mesInicio < 1) {
+        mesInicio = 12
+        anoInicio = anoFim - 1
+    }
+
+    const dataInicio = `${anoInicio}-${String(mesInicio).padStart(2, "0")}-${String(diaFechamento).padStart(2, "0")}`
+    const dataFim = `${anoFim}-${String(mesFim).padStart(2, "0")}-${String(diaFechamento).padStart(2, "0")}`
+
+    const { data, error } = await supabase
+        .from("lancamentos")
+        .update({ pago: true })
+        .eq("id_cartao", cartaoId)
+        .gte("data", dataInicio)
+        .lt("data", dataFim)
+        .select()
+
+    if (error) throw error
+    return data
 }

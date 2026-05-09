@@ -62,11 +62,17 @@ export function LoginForm() {
                     />
                 </Field>
                 <Field>
-                    <Button type="submit" disabled={isSubmitting}>
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
                         {isSubmitting ? "Entrando..." : "Login"}
                     </Button>
                 </Field>
+
+                <div className="text-center text-sm">
+                    Não tem uma conta? <DialogCadastro />
+                </div>
             </FieldGroup>
         </form>
     )
 }
+
+import { DialogCadastro } from "./dialog-cadastro"

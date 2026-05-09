@@ -18,7 +18,11 @@ export default function LoginPage() {
                     </div>
                 </div>
             </div>
+
+
             <div className="relative hidden bg-muted lg:block">
+
+
                 <div className="relative h-full w-full overflow-hidden  bg-white">
                     <LiquidBlob
                         color="#638a0f"

@@ -12,37 +12,83 @@ import { format, subMonths, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 // ── hook que busca e agrega os dados dos últimos 6 meses ──────────────────────
-function useFluxo6Meses() {
+import { useCartoes, Cartao } from '@/services/cartoes';
+import { supabase } from '@/lib/supabase';
+import { addMonths } from 'date-fns';
+import { useUser } from '@/hooks/useUser';
+
+function useFluxo6Meses(idsContas?: number[]) {
+    const { data: user } = useUser();
+    const { data: cartoes = [] } = useCartoes();
+
     return useQuery({
-        queryKey: ['relatorio-fluxo-6meses'],
+        queryKey: ['relatorio-fluxo-6meses', idsContas, cartoes?.length, user?.email],
+        enabled: !!user?.email,
         queryFn: async () => {
             const hoje = new Date();
 
-            // busca todos os lançamentos dos últimos 6 meses de uma vez
-            // (sem filtro de conta para pegar tudo)
             const meses = Array.from({ length: 6 }, (_, i) => {
                 const d = subMonths(startOfMonth(hoje), 5 - i);
                 return { mes: d.getMonth() + 1, ano: d.getFullYear(), date: d };
             });
 
-            const data = await getLancamentosFilter({
-                mes: meses[0].mes,   // início
-                ano: meses[0].ano,
-                // sem idsContas = busca tudo (ajuste conforme sua lógica)
-            });
+            // Buscar lançamentos que podem impactar os últimos 6 meses
+            // Gastos de cartão de até 2 meses antes do início podem vencer agora.
+            const dataBuscaInicio = format(subMonths(meses[0].date, 2), 'yyyy-MM-01');
+            
+            let query = supabase
+                .from("lancamentos")
+                .select("*")
+                .eq("user", user?.email)
+                .gte("data", dataBuscaInicio)
+                .eq("pago", true); // Apenas o que foi pago impacta o fluxo real
 
-            // agrupa por mês
+            if (idsContas && idsContas.length > 0) {
+                // Filtro complexo: conta_id na lista OU (id_cartao na lista de cartões daquelas contas)
+                const idsCartoesRelacionados = cartoes
+                    .filter(c => c.id_conta && idsContas.includes(c.id_conta))
+                    .map(c => c.id);
+
+                let filterStr = `conta_id.in.(${idsContas.join(",")})`;
+                if (idsCartoesRelacionados.length > 0) {
+                    filterStr += `,id_cartao.in.(${idsCartoesRelacionados.join(",")})`;
+                }
+                query = query.or(filterStr);
+            }
+
+            const { data: lancamentos, error } = await query;
+            if (error) throw error;
+
             const agrupado: Record<string, { entradas: number; saidas: number }> = {};
             for (const m of meses) {
                 const chave = format(m.date, 'yyyy-MM');
                 agrupado[chave] = { entradas: 0, saidas: 0 };
             }
 
-            for (const l of data ?? []) {
-                const chave = l.data?.slice(0, 7); // "yyyy-MM"
-                if (!chave || !agrupado[chave]) continue;
-                if (l.valor > 0) agrupado[chave].entradas += l.valor;
-                else agrupado[chave].saidas += Math.abs(l.valor);
+            for (const l of lancamentos || []) {
+                let dataFinanceira = l.data;
+
+                // Lógica de Teletransporte para Cartão
+                if (l.id_cartao) {
+                    const c = cartoes.find(card => card.id === l.id_cartao);
+                    if (c) {
+                        const d = new Date(l.data + 'T00:00:00');
+                        const diaCompra = d.getDate();
+                        const mesCompra = d.getMonth();
+                        const anoCompra = d.getFullYear();
+
+                        let mesVencimento = mesCompra + (diaCompra <= (c.dia_fechamento || 28) ? 1 : 2);
+                        const targetDate = new Date(anoCompra, mesVencimento, c.dia_vencimento || 1);
+                        dataFinanceira = format(targetDate, 'yyyy-MM-dd');
+                    }
+                }
+
+                const chave = dataFinanceira.slice(0, 7); // "yyyy-MM"
+                if (!agrupado[chave]) continue;
+
+                const valor = Number(l.valor);
+                if (valor > 0) agrupado[chave].entradas += valor;
+                else agrupado[chave].saidas += Math.abs(valor);
             }
 
             return meses.map((m) => {
@@ -55,12 +101,17 @@ function useFluxo6Meses() {
                 };
             });
         },
+        staleTime: 1000 * 60 * 5,
     });
 }
 
+import { useLancamentosStore } from '@/store/lancamentosStore';
+
 // ── componente do card ────────────────────────────────────────────────────────
 export function FluxoCard() {
-    const { data: fluxo, isLoading } = useFluxo6Meses();
+    const contasSelecionadas = useLancamentosStore((s) => s.contasSelecionadas);
+    const idsContas = (contasSelecionadas || []).map(c => c.id);
+    const { data: fluxo, isLoading } = useFluxo6Meses(idsContas);
 
     const totalEntradas = fluxo?.reduce((s, m) => s + m.entradas, 0) ?? 0;
     const totalSaidas = fluxo?.reduce((s, m) => s + m.saidas, 0) ?? 0;

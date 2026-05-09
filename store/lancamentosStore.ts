@@ -21,8 +21,8 @@ export const useLancamentosStore = create<LancamentosStore>()(
     persist(
         (set) => ({
             contasSelecionadas: [],
-            mesSelecionado: null,
-            anoSelecionado: null,
+            mesSelecionado: new Date().getMonth() + 1,
+            anoSelecionado: new Date().getFullYear(),
             setContasSelecionadas: (contas) => set({ contasSelecionadas: contas }),
             setMes: (mes) => set({ mesSelecionado: mes }),
             setAno: (ano) => set({ anoSelecionado: ano }),

@@ -34,9 +34,11 @@ import { useSaldosPorDia, SaldoDia } from '@/hooks/useSaldoDia'
 interface Props<TData extends { data?: string }> {
     columns: ColumnDef<TData>[]
     data: TData[]
+    onFaturaClick?: (cartao: any) => void
+    idsContas?: number[]
 }
 
-export function DataTable<TData extends { data?: string }>({ columns, data }: Props<TData>) {
+export function DataTable<TData extends { data?: string }>({ columns, data, onFaturaClick, idsContas }: Props<TData>) {
     const [openSheet, setOpenSheet] = React.useState(false)
     const [openEditDialog, setOpenEditDialog] = React.useState(false)
 
@@ -55,7 +57,7 @@ export function DataTable<TData extends { data?: string }>({ columns, data }: Pr
     const dataInicio = datas[0]
     const dataFim = datas[datas.length - 1]
 
-    const { data: saldosPorDia = {} } = useSaldosPorDia(dataInicio, dataFim)
+    const { data: saldosPorDia = {} } = useSaldosPorDia(dataInicio, dataFim, idsContas)
 
 
 
@@ -66,8 +68,12 @@ export function DataTable<TData extends { data?: string }>({ columns, data }: Pr
     })
 
     function handleRowClick(row: TData) {
-        setRowSelected(row)
-        setOpenSheet(true)
+        if ((row as any).isFatura) {
+            onFaturaClick?.((row as any).cartao)
+        } else {
+            setRowSelected(row)
+            setOpenSheet(true)
+        }
     }
 
 
@@ -112,7 +118,10 @@ export function DataTable<TData extends { data?: string }>({ columns, data }: Pr
 
                                     {/* Linha normal */}
                                     <TableRow
-                                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                                        className={`cursor-pointer transition-colors ${!(row.original as any).pago 
+                                                ? "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-950/50" 
+                                                : "hover:bg-muted/50"
+                                            }`}
                                         onClick={() => handleRowClick(row.original)}
                                     >
                                         {row.getVisibleCells().map(cell => (
@@ -201,6 +210,7 @@ export function DataTable<TData extends { data?: string }>({ columns, data }: Pr
                     lancamentoId={(rowSelected as any)?.id}
                     temParcelamento={!!(rowSelected as any)?.id_parcelamento}
                     idParcelamento={(rowSelected as any)?.id_parcelamento}
+                    idRecorrencia={(rowSelected as any)?.id_recorrencia}
                 />
             </Sheet>
 
