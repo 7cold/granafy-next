@@ -220,8 +220,8 @@ export function ResultadoAnualCard() {
                             accessibilityLayer
                             data={meses}
                             onMouseDown={(e) => {
-                                if (e && e.activeTooltipIndex !== undefined) {
-                                    const dataPoint = meses[e.activeTooltipIndex];
+                                if (e && e.activeTooltipIndex != null) {
+                                    const dataPoint = meses?.[e.activeTooltipIndex as number];
                                     if (dataPoint) {
                                         const [y, m] = dataPoint.chave.split("-");
                                         setMes(Number(m));
