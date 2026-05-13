@@ -18,6 +18,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Granafy.app",
   description: "Granafy.app",
+  icons: {
+    icon: "/logo.jpg",
+  },
 };
 
 export default function RootLayout({
