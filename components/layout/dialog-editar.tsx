@@ -102,21 +102,15 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
                                 name="valor"
                                 control={control}
                                 render={({ field }) => (
-                                    <NumericFormat
-                                        name={field.name}
-                                        value={field.value}
-                                        getInputRef={field.ref}
-                                        customInput={Input}
-                                        thousandSeparator="."
-                                        decimalSeparator=","
-                                        prefix="R$ "
-                                        decimalScale={2}
-                                        fixedDecimalScale
-                                        allowNegative={false}
-                                        placeholder="R$ 0,00"
-                                        onValueChange={(values) => {
-                                            field.onChange(values.floatValue ?? null)
+                                    <Input
+                                        value={new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(field.value || 0))}
+                                        onChange={(e) => {
+                                            const rawValue = e.target.value.replace(/\D/g, "");
+                                            const cents = parseInt(rawValue || "0", 10);
+                                            field.onChange(cents / 100);
                                         }}
+                                        className="text-left font-mono"
+                                        placeholder="0,00"
                                     />
                                 )}
                             />

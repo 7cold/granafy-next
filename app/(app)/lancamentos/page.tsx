@@ -189,12 +189,24 @@ export default function Page() {
                 onOpenChange={(v) => !v && setSelectedCartaoFatura(null)} 
             />
 
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mx-5 mt-6 mb-4">
-                <div className="w-full sm:w-auto">
-                    <ComponenteContas />
+            <div className="flex flex-row justify-between items-center gap-4 mx-5 mt-6 mb-4">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex-1 sm:flex-none min-w-[150px]">
+                        <ComponenteContas />
+                    </div>
+                    {/* Botão de + visível apenas no mobile */}
+                    <Button 
+                        size="icon"
+                        className="sm:hidden shadow-md shrink-0 h-10 w-10 rounded-full" 
+                        onClick={() => setOpen(true)}
+                    >
+                        <PlusIcon className="h-6 w-6" />
+                    </Button>
                 </div>
+
+                {/* Botão completo visível apenas em telas maiores */}
                 <Button 
-                    className="w-full sm:w-auto shadow-sm" 
+                    className="hidden sm:flex shadow-sm" 
                     onClick={() => setOpen(true)}
                 >
                     <PlusIcon className="mr-2 h-4 w-4" />

@@ -30,6 +30,10 @@ import { DialogDeleteLancamento } from "./dialog-delete-lancamento"
 import { toast } from "sonner"
 import { DialogEditarLancamento } from "./dialog-editar"
 import { useSaldosPorDia, SaldoDia } from '@/hooks/useSaldoDia'
+import { Check, Pencil, X, Save, CheckCircle2, Circle, CalendarIcon } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { NumericFormat } from "react-number-format"
+import { updateLancamento } from "@/services/lancamentos"
 
 interface Props<TData extends { data?: string }> {
     columns: ColumnDef<TData>[]
@@ -58,6 +62,53 @@ export function DataTable<TData extends { data?: string }>({ columns, data, onFa
     const dataFim = datas[datas.length - 1]
 
     const { data: saldosPorDia = {} } = useSaldosPorDia(dataInicio, dataFim, idsContas)
+
+    // Estados para edição rápida
+    const [editField, setEditField] = React.useState<string | null>(null)
+    const [editValue, setEditValue] = React.useState<any>(null)
+
+    // Resetar estados de edição ao fechar o sheet ou trocar de linha
+    React.useEffect(() => {
+        if (!openSheet) {
+            setEditField(null)
+            setEditValue(null)
+        }
+    }, [openSheet, rowSelected])
+
+    const mutationUpdate = useMutation({
+        mutationFn: async (newData: any) => {
+            const original = rowSelected as any
+            const payload = {
+                id: original.id,
+                tipo: original.tipo,
+                descricao: original.descricao,
+                valor: original.valor,
+                categoria_id: original.categoria_id,
+                conta_id: original.conta_id,
+                id_cartao: original.id_cartao,
+                pago: original.pago,
+                data: original.data,
+                ...newData
+            }
+            return updateLancamento(payload)
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["lancamentos"] })
+            toast.success("Lançamento atualizado")
+            setEditField(null)
+        },
+        onError: (err) => {
+            toast.error("Erro ao atualizar: " + (err as Error).message)
+        }
+    })
+
+    const handleQuickUpdate = (field: string, value: any) => {
+        mutationUpdate.mutate({ [field]: value })
+        // Atualiza o estado local do rowSelected para refletir a mudança no Sheet imediatamente
+        if (rowSelected) {
+            setRowSelected({ ...rowSelected, [field]: value })
+        }
+    }
 
 
 
@@ -118,9 +169,9 @@ export function DataTable<TData extends { data?: string }>({ columns, data, onFa
 
                                     {/* Linha normal */}
                                     <TableRow
-                                        className={`cursor-pointer transition-colors ${!(row.original as any).pago 
-                                                ? "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-950/50" 
-                                                : "hover:bg-muted/50"
+                                        className={`cursor-pointer transition-colors ${!(row.original as any).pago
+                                            ? "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-950/50"
+                                            : "hover:bg-muted/50"
                                             }`}
                                         onClick={() => handleRowClick(row.original)}
                                     >
@@ -178,27 +229,132 @@ export function DataTable<TData extends { data?: string }>({ columns, data, onFa
                         </div>
                     </SheetHeader>
 
-                    <div className="m-4 text-sm space-y-4 rounded-lg border p-3 shadow-sm" >
-                        <div className="grid grid-cols-2 border-b pb-2">
-                            <span className="font-semibold">Descrição:</span>
-                            <span>{(rowSelected as any)?.descricao}</span>
+                    <div className="m-4 text-sm space-y-4 rounded-lg border p-4 shadow-sm bg-card">
+                        {/* Descrição */}
+                        <div className="flex flex-col gap-1.5 border-b pb-3">
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Descrição</span>
+                            {editField === "descricao" ? (
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        value={editValue}
+                                        onChange={(e) => setEditValue(e.target.value)}
+                                        className="h-8"
+                                        autoFocus
+                                    />
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600" onClick={() => handleQuickUpdate("descricao", editValue)}>
+                                        <Check className="h-4 w-4" />
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-600" onClick={() => setEditField(null)}>
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div
+                                    className="flex items-center justify-between group cursor-pointer hover:bg-muted/50 p-1 rounded transition-colors"
+                                    onClick={() => {
+                                        setEditField("descricao")
+                                        setEditValue((rowSelected as any)?.descricao)
+                                    }}
+                                >
+                                    <span className="text-base font-medium">{(rowSelected as any)?.descricao}</span>
+                                    <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                            )}
                         </div>
-                        <div className="grid grid-cols-2 border-b pb-2">
-                            <span className="font-semibold">Valor:</span>
-                            <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((rowSelected as any)?.valor || 0)}</span>
+
+                        {/* Valor e Status Pago */}
+                        <div className="flex items-center justify-between border-b pb-3">
+                            <div className="flex flex-col gap-1.5 flex-1">
+                                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Valor</span>
+                                {editField === "valor" ? (
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            value={new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(editValue || 0)}
+                                            onChange={(e) => {
+                                                const rawValue = e.target.value.replace(/\D/g, "");
+                                                const cents = parseInt(rawValue || "0", 10);
+                                                setEditValue(cents / 100);
+                                            }}
+                                            className="h-8 w-40 font-mono text-left"
+                                            autoFocus
+                                        />
+                                        <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600" onClick={() => handleQuickUpdate("valor", Number(editValue))}>
+                                            <Check className="h-4 w-4" />
+                                        </Button>
+                                        <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-600" onClick={() => setEditField(null)}>
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div
+                                        className="flex items-center gap-2 group cursor-pointer hover:bg-muted/50 p-1 rounded transition-colors w-fit"
+                                        onClick={() => {
+                                            setEditField("valor")
+                                            setEditValue(Math.abs((rowSelected as any)?.valor || 0))
+                                        }}
+                                    >
+                                        <span className={`text-xl font-bold ${(rowSelected as any)?.valor < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((rowSelected as any)?.valor || 0)}
+                                        </span>
+                                        <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex flex-col items-end gap-1.5">
+                                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</span>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className={`h-9 gap-2 px-3 rounded-full transition-all ${(rowSelected as any)?.pago
+                                            ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                                            : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                                        }`}
+                                    onClick={() => handleQuickUpdate("pago", !(rowSelected as any)?.pago)}
+                                >
+                                    {(rowSelected as any)?.pago ? <CheckCircle2 className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
+                                    <span className="font-semibold">{(rowSelected as any)?.pago ? "Pago" : "Pendente"}</span>
+                                </Button>
+                            </div>
                         </div>
-                        <div className="grid grid-cols-2 border-b pb-2">
-                            <span className="font-semibold">Status:</span>
-                            <span>{(rowSelected as any)?.pago ? "Pago" : "Pendente"}</span>
-                        </div>
-                        <div className="grid grid-cols-2 border-b pb-2">
-                            <span className="font-semibold">Data:</span>
-                            <span>
-                                {(rowSelected as any)?.data &&
-                                    new Date((rowSelected as any).data).toLocaleDateString('pt-BR', {
-                                        timeZone: 'UTC',
-                                    })}
-                            </span>
+
+                        {/* Data */}
+                        <div className="flex flex-col gap-1.5">
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Data do Lançamento</span>
+                            {editField === "data" ? (
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        type="date"
+                                        value={editValue}
+                                        onChange={(e) => setEditValue(e.target.value)}
+                                        className="h-8 w-40"
+                                        autoFocus
+                                    />
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600" onClick={() => handleQuickUpdate("data", editValue)}>
+                                        <Check className="h-4 w-4" />
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-600" onClick={() => setEditField(null)}>
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div
+                                    className="flex items-center justify-between group cursor-pointer hover:bg-muted/50 p-1 rounded transition-colors"
+                                    onClick={() => {
+                                        setEditField("data")
+                                        setEditValue((rowSelected as any)?.data?.slice(0, 10))
+                                    }}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                                        <span className="text-base">
+                                            {(rowSelected as any)?.data &&
+                                                new Date((rowSelected as any).data + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                        </span>
+                                    </div>
+                                    <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                            )}
                         </div>
                     </div>
                 </SheetContent>
