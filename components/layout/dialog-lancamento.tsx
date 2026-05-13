@@ -123,7 +123,7 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                     conta_id: data.conta_id,
                     conta_destino_id: data.conta_destino_id,
                     id_cartao: modo === "cartao" ? data.id_cartao : "",
-                    pago: true,
+                    pago: modo === "cartao" ? false : true,
                     data: data.data,
                     parcelas: 1,
                     recorrente: false,

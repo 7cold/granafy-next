@@ -76,6 +76,38 @@ function useResultadoAnual(apenasLancamentosPagos: boolean, idsContas?: number[]
             const { data, error } = await query
             if (error) throw error
 
+            // 1. Calcular o Saldo Inicial das Contas
+            const { data: contasInfo } = await supabase
+                .from("contas")
+                .select("saldo_inicial")
+                .eq("user", user?.email)
+                .in("id", idsContas && idsContas.length > 0 ? idsContas : (await supabase.from("contas").select("id").eq("user", user?.email)).data?.map(c => c.id) || [])
+
+            const saldoInicialContas = (contasInfo ?? []).reduce((acc, c) => acc + (c.saldo_inicial || 0), 0)
+
+            // 2. Calcular o acumulado de anos anteriores (até 31/12 do ano passado)
+            let anteriorQuery = supabase
+                .from("lancamentos")
+                .select("valor")
+                .eq("user", user?.email)
+                .lt("data", dataInicioAno)
+
+            if (idsContas && idsContas.length > 0) {
+                const idsCartoesRelacionados = cartoes
+                    .filter(c => c.id_conta && idsContas.includes(c.id_conta))
+                    .map(c => c.id)
+
+                let filterStr = `conta_id.in.(${idsContas.join(",")})`
+                if (idsCartoesRelacionados.length > 0) {
+                    filterStr += `,id_cartao.in.(${idsCartoesRelacionados.join(",")})`
+                }
+                anteriorQuery = anteriorQuery.or(filterStr)
+            }
+
+            const { data: anteriorData } = await anteriorQuery.returns<{ valor: number }[]>()
+
+            const saldoAnosAnteriores = (anteriorData ?? []).reduce((acc, l) => acc + (l.valor || 0), 0)
+
             const meses = Array.from({ length: 12 }, (_, i) => {
                 const d = setMonth(startOfMonth(new Date(anoAtual, 0)), i)
                 const label = format(d, "MMM", { locale: ptBR })
@@ -89,14 +121,12 @@ function useResultadoAnual(apenasLancamentosPagos: boolean, idsContas?: number[]
 
             const lancamentos = (data ?? []).filter((l) => {
                 if (!apenasLancamentosPagos) return true
-                // Para "Somente Pagos", consideramos apenas o que foi liquidado (recebido ou pago)
                 return l.pago === true
             })
 
             for (const l of lancamentos) {
                 let dataFinanceira = l.data;
 
-                // Lógica de Teletransporte para Cartão (Resultado Anual)
                 if (l.id_cartao) {
                     const c = cartoes.find(card => card.id === l.id_cartao);
                     if (c) {
@@ -105,7 +135,6 @@ function useResultadoAnual(apenasLancamentosPagos: boolean, idsContas?: number[]
                         const mesCompra = d.getMonth();
                         const anoCompra = d.getFullYear();
 
-                        // Se a compra foi após o fechamento, vence no mês M+2
                         let mesVencimento = mesCompra + (diaCompra <= (c.dia_fechamento || 28) ? 1 : 2);
                         const targetDate = new Date(anoCompra, mesVencimento, c.dia_vencimento || 1);
                         dataFinanceira = format(targetDate, 'yyyy-MM-dd');
@@ -117,7 +146,7 @@ function useResultadoAnual(apenasLancamentosPagos: boolean, idsContas?: number[]
                 if (m) m.saldo += l.valor
             }
 
-            let acumulado = 0
+            let acumulado = saldoInicialContas + saldoAnosAnteriores
             return meses.map((m) => {
                 acumulado += m.saldo
                 return { ...m, saldo: acumulado }

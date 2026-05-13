@@ -2,11 +2,12 @@ import { useState } from "react"
 
 type Props = {
     data: any[]
+    saldoInicial?: number
 }
 
 type Filtro = "todos" | "pagos" | "nao_pagos"
 
-export function ResumoFinanceiro({ data }: Props) {
+export function ResumoFinanceiro({ data, saldoInicial }: Props) {
     const [filtro, setFiltro] = useState<Filtro>("todos")
 
     const dadosFiltrados = (data || []).filter((item) => {
@@ -23,10 +24,10 @@ export function ResumoFinanceiro({ data }: Props) {
             } else {
                 acc.saidas += Math.abs(valor)
             }
-            acc.saldo = acc.entradas - acc.saidas
+            acc.saldo = (saldoInicial || 0) + acc.entradas - acc.saidas
             return acc
         },
-        { entradas: 0, saidas: 0, saldo: 0 }
+        { entradas: 0, saidas: 0, saldo: saldoInicial || 0 }
     )
 
     const tabs: { label: string; value: Filtro }[] = [

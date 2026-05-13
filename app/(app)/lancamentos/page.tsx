@@ -180,6 +180,12 @@ export default function Page() {
         placeholderData: (prev) => prev
     })
 
+    const { data: allContas = [] } = useContas()
+    const saldoInicialTotal = contasSelecionadas.reduce((acc, selected) => {
+        const fullConta = allContas.find(c => c.id === selected.id)
+        return acc + (fullConta?.saldo_inicial || 0)
+    }, 0)
+
     return (
         <>
             <DialogLancamento open={open} onOpenChange={setOpen} />
@@ -230,7 +236,7 @@ export default function Page() {
                     onFaturaClick={(cartao) => setSelectedCartaoFatura(cartao)}
                 />
             )}
-            <ResumoFinanceiro data={data} />
+            <ResumoFinanceiro data={data} saldoInicial={saldoInicialTotal} />
         </>
     )
 }

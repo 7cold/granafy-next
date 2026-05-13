@@ -11,6 +11,7 @@ export interface Conta {
     ativo: boolean | null
     user: string | null
     id_banco: number | null
+    saldo_inicial: number | null
 }
 
 export interface CreateContaInput {
@@ -19,6 +20,7 @@ export interface CreateContaInput {
     user?: string
     id_banco?: number
     ativo?: boolean
+    saldo_inicial?: number
 }
 
 export interface UpdateContaInput {
@@ -26,6 +28,7 @@ export interface UpdateContaInput {
     cor?: string
     id_banco?: number
     ativo?: boolean
+    saldo_inicial?: number
 }
 
 const { data: { user } } = await supabase.auth.getUser()
@@ -58,7 +61,8 @@ export function useAddConta() {
                     cor: newConta.cor || null,
                     user: user?.email || null,
                     id_banco: newConta.id_banco || null,
-                    ativo: newConta.ativo ?? true, // Por padrão, conta fica ativa
+                    ativo: newConta.ativo ?? true,
+                    saldo_inicial: newConta.saldo_inicial || 0,
                 })
                 .select()
                 .single()

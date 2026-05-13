@@ -18,6 +18,7 @@ import { supabase } from "@/lib/supabase"
 interface ContaFormData {
     nome: string
     cor?: string
+    saldo_inicial?: number
 }
 
 export default function ContasPage() {
@@ -41,11 +42,13 @@ export default function ContasPage() {
         register: registerAdd,
         handleSubmit: handleSubmitAdd,
         reset: resetAdd,
+        control: controlAdd,
         formState: { errors: errorsAdd },
     } = useForm<ContaFormData>({
         defaultValues: {
             nome: "",
             cor: "",
+            saldo_inicial: 0,
         },
     })
 
@@ -54,11 +57,13 @@ export default function ContasPage() {
         register: registerEdit,
         handleSubmit: handleSubmitEdit,
         reset: resetEdit,
+        control: controlEdit,
         formState: { errors: errorsEdit },
     } = useForm<ContaFormData>({
         defaultValues: {
             nome: "",
             cor: "",
+            saldo_inicial: 0,
         },
     })
 
@@ -81,6 +86,7 @@ export default function ContasPage() {
             await addConta.mutateAsync({
                 nome: data.nome,
                 cor: data.cor || undefined,
+                saldo_inicial: data.saldo_inicial || 0,
                 ativo: true
             })
 
@@ -103,6 +109,7 @@ export default function ContasPage() {
                 updates: {
                     nome: data.nome,
                     cor: data.cor || undefined,
+                    saldo_inicial: data.saldo_inicial || 0,
                 },
             })
 
@@ -134,6 +141,7 @@ export default function ContasPage() {
         resetEdit({
             nome: conta.nome || "",
             cor: conta.cor || "",
+            saldo_inicial: conta.saldo_inicial || 0,
         })
     }
 
@@ -240,18 +248,26 @@ export default function ContasPage() {
                                                     )}
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="edit-cor">
-                                                        Cor (Opcional)
+                                                    <Label htmlFor="edit-saldo">
+                                                        Saldo Inicial
                                                     </Label>
-                                                    <div className="flex gap-2">
-                                                        <Input
-                                                            id="edit-cor"
-                                                            type="color"
-                                                            {...registerEdit("cor")}
-                                                            className="w-20 h-10"
-                                                        />
-
-                                                    </div>
+                                                    <Controller
+                                                        name="saldo_inicial"
+                                                        control={controlEdit}
+                                                        render={({ field }) => (
+                                                            <Input
+                                                                id="edit-saldo"
+                                                                value={new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(field.value || 0)}
+                                                                onChange={(e) => {
+                                                                    const rawValue = e.target.value.replace(/\D/g, "");
+                                                                    const cents = parseInt(rawValue || "0", 10);
+                                                                    field.onChange(cents / 100);
+                                                                }}
+                                                                className="text-left font-mono"
+                                                            />
+                                                        )}
+                                                    />
+                                                    <p className="text-[10px] text-muted-foreground italic">Este valor será o ponto de partida desta conta.</p>
                                                 </div>
                                                 <div className="flex gap-3">
                                                     <Button
@@ -291,6 +307,12 @@ export default function ContasPage() {
                                                             Desativada
                                                         </Badge>
                                                     )}
+                                                    <div className="mt-2">
+                                                        <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Saldo Inicial:</span>
+                                                        <p className="text-sm font-mono">
+                                                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(conta.saldo_inicial || 0)}
+                                                        </p>
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center gap-2 ml-4">
                                                     <Button
@@ -361,6 +383,29 @@ export default function ContasPage() {
                                 )}
                             </div>
                             <div className="space-y-2">
+                                <Label htmlFor="saldo">
+                                    Saldo Inicial
+                                </Label>
+                                <Controller
+                                    name="saldo_inicial"
+                                    control={controlAdd}
+                                    render={({ field }) => (
+                                        <Input
+                                            id="saldo"
+                                            value={new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(field.value || 0)}
+                                            onChange={(e) => {
+                                                const rawValue = e.target.value.replace(/\D/g, "");
+                                                const cents = parseInt(rawValue || "0", 10);
+                                                field.onChange(cents / 100);
+                                            }}
+                                            className="text-left font-mono"
+                                            placeholder="0,00"
+                                        />
+                                    )}
+                                />
+                                <p className="text-[10px] text-muted-foreground italic">Este valor será o ponto de partida desta conta.</p>
+                            </div>
+                            <div className="space-y-2">
                                 <Label htmlFor="cor">
                                     Cor (Opcional)
                                 </Label>
@@ -371,7 +416,6 @@ export default function ContasPage() {
                                         {...registerAdd("cor")}
                                         className="w-20 h-10"
                                     />
-
                                 </div>
                             </div>
                             <DialogFooter>
