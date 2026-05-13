@@ -91,7 +91,7 @@ export function DataTable<TData extends { data?: string }>({ columns, data, onFa
                         {table.getHeaderGroups().map(headerGroup => (
                             <TableRow key={headerGroup.id}>
                                 {headerGroup.headers.map(header => (
-                                    <TableHead key={header.id}>
+                                    <TableHead key={header.id} style={{ width: header.column.getSize() }}>
                                         {flexRender(
                                             header.column.columnDef.header,
                                             header.getContext()
@@ -125,7 +125,7 @@ export function DataTable<TData extends { data?: string }>({ columns, data, onFa
                                         onClick={() => handleRowClick(row.original)}
                                     >
                                         {row.getVisibleCells().map(cell => (
-                                            <TableCell key={cell.id}>
+                                            <TableCell key={cell.id} style={{ width: cell.column.getSize() }}>
                                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                             </TableCell>
                                         ))}
@@ -211,6 +211,7 @@ export function DataTable<TData extends { data?: string }>({ columns, data, onFa
                     temParcelamento={!!(rowSelected as any)?.id_parcelamento}
                     idParcelamento={(rowSelected as any)?.id_parcelamento}
                     idRecorrencia={(rowSelected as any)?.id_recorrencia}
+                    descricao={(rowSelected as any)?.descricao}
                 />
             </Sheet>
 

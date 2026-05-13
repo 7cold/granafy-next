@@ -20,6 +20,7 @@ type DialogDeleteLancamentoProps = {
     temParcelamento: boolean
     idParcelamento: number | null
     idRecorrencia?: number | null
+    descricao?: string
 }
 
 export function DialogDeleteLancamento({
@@ -29,6 +30,7 @@ export function DialogDeleteLancamento({
     temParcelamento,
     idParcelamento,
     idRecorrencia,
+    descricao,
 }: DialogDeleteLancamentoProps) {
     const queryClient = useQueryClient()
 
@@ -45,15 +47,19 @@ export function DialogDeleteLancamento({
         },
     })
 
-    if (!temParcelamento && !idRecorrencia) {
-        // sem parcelamento — apaga direto
+    const isTransferencia = descricao?.includes("⇅")
+
+    if ((!temParcelamento && !idRecorrencia) || isTransferencia) {
+        // sem parcelamento ou transferência — apaga direto (o serviço cuida do par da transferência)
         return (
             <AlertDialog open={open} onOpenChange={onOpenChange}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Excluir lançamento?</AlertDialogTitle>
+                        <AlertDialogTitle>Excluir {isTransferencia ? "transferência" : "lançamento"}?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            Esta ação não pode ser desfeita.
+                            {isTransferencia 
+                                ? "Isso excluirá os dois lançamentos vinculados desta transferência." 
+                                : "Esta ação não pode ser desfeita."}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>

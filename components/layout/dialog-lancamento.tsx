@@ -45,6 +45,7 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
             valor: null,
             categoria_id: "",
             conta_id: "",
+            conta_destino_id: "",
             id_cartao: defaultCartaoId ? defaultCartaoId.toString() : "",
             pago: modo == "cartao" ? false : true,
             data: new Date(),
@@ -56,31 +57,73 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
     const tipoSelecionado = watch("tipo")
     const isRecorrente = watch("recorrente")
 
-    function onSubmit(data: any, continuar: boolean = false) {
-        if (!data.descricao || data.descricao.trim() === "") {
-            const categoriaSelecionada = categorias?.find(c => c.id.toString() === data.categoria_id?.toString())
-            if (categoriaSelecionada && categoriaSelecionada.nome) {
-                data.descricao = categoriaSelecionada.nome
+    async function onSubmit(data: any, continuar: boolean = false) {
+        try {
+            if (data.tipo === "transferencia") {
+                if (!data.conta_id || !data.conta_destino_id) {
+                    toast.error("Selecione as contas de origem e destino");
+                    return;
+                }
+                if (data.conta_id === data.conta_destino_id) {
+                    toast.error("As contas de origem e destino devem ser diferentes");
+                    return;
+                }
+
+                const contaOrigem = contas?.find(c => c.id.toString() === data.conta_id.toString());
+                const contaDestino = contas?.find(c => c.id.toString() === data.conta_destino_id.toString());
+                const transferId = Math.floor(Date.now() * 1000 + Math.random() * 1000);
+
+                // Cria o lançamento de SAÍDA na conta de ORIGEM
+                await createLancamento({
+                    ...data,
+                    tipo: "despesa",
+                    descricao: `⇅ Transferência - Para ${contaDestino?.nome ?? "Conta Destino"}`,
+                    valor: -Math.abs(data.valor),
+                    conta_id: data.conta_id,
+                    pago: true,
+                    categoria_id: "0",
+                    id_recorrencia: transferId,
+                });
+
+                // Cria o lançamento de ENTRADA na conta de DESTINO
+                await createLancamento({
+                    ...data,
+                    tipo: "receita",
+                    descricao: `⇅ Transferência - De ${contaOrigem?.nome ?? "Conta Origem"}`,
+                    valor: Math.abs(data.valor),
+                    conta_id: data.conta_destino_id,
+                    pago: true,
+                    categoria_id: "0",
+                    id_recorrencia: transferId,
+                });
+            } else {
+                if (!data.descricao || data.descricao.trim() === "") {
+                    const categoriaSelecionada = categorias?.find(c => c.id.toString() === data.categoria_id?.toString())
+                    if (categoriaSelecionada && categoriaSelecionada.nome) {
+                        data.descricao = categoriaSelecionada.nome
+                    }
+                }
+
+                if (data.descricao && typeof data.descricao === "string") {
+                    data.descricao = data.descricao.charAt(0).toUpperCase() + data.descricao.slice(1)
+                }
+
+                await createLancamento(data);
             }
-        }
 
-        if (data.descricao && typeof data.descricao === "string") {
-            data.descricao = data.descricao.charAt(0).toUpperCase() + data.descricao.slice(1)
-        }
-
-        createLancamento(data).then(() => {
             toast.success("Lançamento cadastrado com sucesso!")
             queryClient.invalidateQueries({ queryKey: ["lancamentos"] })
 
             if (continuar) {
                 reset({
-                    tipo: "despesa",
+                    tipo: data.tipo,
                     descricao: "",
                     valor: null,
                     categoria_id: "",
-                    conta_id: modo === "conta" ? data.conta_id : "",
+                    conta_id: data.conta_id,
+                    conta_destino_id: data.conta_destino_id,
                     id_cartao: modo === "cartao" ? data.id_cartao : "",
-                    pago: modo === "cartao" ? false : true,
+                    pago: true,
                     data: data.data,
                     parcelas: 1,
                     recorrente: false,
@@ -89,9 +132,9 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                 reset()
                 onOpenChange(false)
             }
-        }).catch((err) => {
+        } catch (err: any) {
             toast.error("Erro ao cadastrar lançamento: " + err.message)
-        })
+        }
     }
 
     return (
@@ -121,9 +164,10 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                                 control={control}
                                 render={({ field: { onChange, value } }) => (
                                     <Tabs value={value} onValueChange={onChange}>
-                                        <TabsList className="w-full grid grid-cols-2">
+                                        <TabsList className="w-full grid grid-cols-3">
                                             <TabsTrigger value="despesa">Despesa</TabsTrigger>
                                             <TabsTrigger value="receita">Receita</TabsTrigger>
+                                            <TabsTrigger value="transferencia">Transferência</TabsTrigger>
                                         </TabsList>
                                     </Tabs>
                                 )}
@@ -133,23 +177,25 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
 
 
                         {/* Linha 1 */}
-                        <Field className="col-span-7">
-                            <FieldLabel>Descrição</FieldLabel>
-                            <Input
-                                type="text"
-                                placeholder="Descrição do lançamento"
-                                {...register("descricao", {
-                                    onChange: (e) => {
-                                        const val = e.target.value;
-                                        if (val) {
-                                            e.target.value = val.charAt(0).toUpperCase() + val.slice(1);
+                        {tipoSelecionado !== "transferencia" && (
+                            <Field className="col-span-7">
+                                <FieldLabel>Descrição</FieldLabel>
+                                <Input
+                                    type="text"
+                                    placeholder="Descrição do lançamento"
+                                    {...register("descricao", {
+                                        onChange: (e) => {
+                                            const val = e.target.value;
+                                            if (val) {
+                                                e.target.value = val.charAt(0).toUpperCase() + val.slice(1);
+                                            }
                                         }
-                                    }
-                                })}
-                            />
-                        </Field>
+                                    })}
+                                />
+                            </Field>
+                        )}
 
-                        <Field className="col-span-3">
+                        <Field className={tipoSelecionado === "transferencia" ? "col-span-10" : "col-span-3"}>
                             <FieldLabel>Valor</FieldLabel>
                             <Controller
                                 name="valor"
@@ -176,37 +222,39 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                         {/* Linha 2 */}
 
                         {/* Linha 3 */}
-                        <div className="col-span-5">
-                            <FieldLabel>Categoria</FieldLabel>
-                            <Controller
-                                name="categoria_id"
-                                control={control}
-                                rules={{ required: "Selecione a categoria" }}
-                                render={({ field: { onChange, value } }) => (
-                                    <Select value={value} onValueChange={onChange}>
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Selecione a Categoria" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectGroup>
-                                                <SelectLabel>Categorias</SelectLabel>
-                                                {categorias?.filter((e) => e.ativo && e.tipo === (tipoSelecionado ?? "despesa"))
-                                                    .sort((a, b) => (a.nome ?? "").localeCompare(b.nome ?? ""))
-                                                    .map((cat) => (
-                                                        <SelectItem key={cat.id} value={cat.id.toString()}>
-                                                            {cat.nome}
-                                                        </SelectItem>
-                                                    ))}
-                                            </SelectGroup>
-                                        </SelectContent>
-                                    </Select>
-                                )}
-                            />
-                        </div>
+                        {tipoSelecionado !== "transferencia" && (
+                            <div className="col-span-5">
+                                <FieldLabel>Categoria</FieldLabel>
+                                <Controller
+                                    name="categoria_id"
+                                    control={control}
+                                    rules={{ required: "Selecione a categoria" }}
+                                    render={({ field: { onChange, value } }) => (
+                                        <Select value={value} onValueChange={onChange}>
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="Selecione a Categoria" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectGroup>
+                                                    <SelectLabel>Categorias</SelectLabel>
+                                                    {categorias?.filter((e) => e.ativo && e.tipo === (tipoSelecionado ?? "despesa"))
+                                                        .sort((a, b) => (a.nome ?? "").localeCompare(b.nome ?? ""))
+                                                        .map((cat) => (
+                                                            <SelectItem key={cat.id} value={cat.id.toString()}>
+                                                                {cat.nome}
+                                                            </SelectItem>
+                                                        ))}
+                                                </SelectGroup>
+                                            </SelectContent>
+                                        </Select>
+                                    )}
+                                />
+                            </div>
+                        )}
 
                         {modo === "conta" ? (
                             <div className="col-span-5">
-                                <FieldLabel>Conta</FieldLabel>
+                                <FieldLabel>{tipoSelecionado === "transferencia" ? "Conta de Origem" : "Conta"}</FieldLabel>
                                 <Controller
                                     name="conta_id"
                                     rules={{ required: "Selecione a Conta" }}
@@ -231,23 +279,53 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                                 />
                             </div>
                         ) : (
+                            tipoSelecionado !== "transferencia" && (
+                                <div className="col-span-5">
+                                    <FieldLabel>Cartão</FieldLabel>
+                                    <Controller
+                                        name="id_cartao"
+                                        rules={{ required: "Selecione o Cartão" }}
+                                        control={control}
+                                        render={({ field: { onChange, value } }) => (
+                                            <Select value={value} onValueChange={onChange}>
+                                                <SelectTrigger className="w-full">
+                                                    <SelectValue placeholder="Selecione o Cartão" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectGroup>
+                                                        <SelectLabel>Cartões</SelectLabel>
+                                                        {cartoes?.filter((e: any) => e.ativo).map((cartao: any) => (
+                                                            <SelectItem key={cartao.id} value={cartao.id.toString()}>
+                                                                Cartão final {cartao.nome}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectGroup>
+                                                </SelectContent>
+                                            </Select>
+                                        )}
+                                    />
+                                </div>
+                            )
+                        )}
+
+                        {tipoSelecionado === "transferencia" && (
                             <div className="col-span-5">
-                                <FieldLabel>Cartão</FieldLabel>
+                                <FieldLabel>Conta de Destino</FieldLabel>
                                 <Controller
-                                    name="id_cartao"
-                                    rules={{ required: "Selecione o Cartão" }}
+                                    name="conta_destino_id"
+                                    rules={{ required: "Selecione a Conta de Destino" }}
                                     control={control}
                                     render={({ field: { onChange, value } }) => (
                                         <Select value={value} onValueChange={onChange}>
                                             <SelectTrigger className="w-full">
-                                                <SelectValue placeholder="Selecione o Cartão" />
+                                                <SelectValue placeholder="Selecione a Conta" />
                                             </SelectTrigger>
                                             <SelectContent>
                                                 <SelectGroup>
-                                                    <SelectLabel>Cartões</SelectLabel>
-                                                    {cartoes?.filter((e: any) => e.ativo).map((cartao: any) => (
-                                                        <SelectItem key={cartao.id} value={cartao.id.toString()}>
-                                                            Cartão final {cartao.nome}
+                                                    <SelectLabel>Contas</SelectLabel>
+                                                    {contas?.filter((e) => e.ativo).map((conta) => (
+                                                        <SelectItem key={conta.id} value={conta.id.toString()}>
+                                                            {conta.nome}
                                                         </SelectItem>
                                                     ))}
                                                 </SelectGroup>
@@ -258,34 +336,36 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                             </div>
                         )}
 
-                        <Field className="col-span-5">
-                            <FieldLabel>Parcelamento</FieldLabel>
-                            <Controller
-                                name="parcelas"
-                                control={control}
-                                render={({ field }) => (
-                                    <Select
-                                        disabled={isRecorrente}
-                                        value={isRecorrente ? "1" : (field.value?.toString() ?? "1")}
-                                        onValueChange={(v) => field.onChange(Number(v))}
-                                    >
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="À vista" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="1">À vista</SelectItem>
-                                            {Array.from({ length: 35 }, (_, i) => i + 2).map((n) => (
-                                                <SelectItem key={n} value={n.toString()}>
-                                                    {n}x
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                )}
-                            />
-                        </Field>
+                        {tipoSelecionado !== "transferencia" && (
+                            <Field className="col-span-5">
+                                <FieldLabel>Parcelamento</FieldLabel>
+                                <Controller
+                                    name="parcelas"
+                                    control={control}
+                                    render={({ field }) => (
+                                        <Select
+                                            disabled={isRecorrente}
+                                            value={isRecorrente ? "1" : (field.value?.toString() ?? "1")}
+                                            onValueChange={(v) => field.onChange(Number(v))}
+                                        >
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="À vista" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="1">À vista</SelectItem>
+                                                {Array.from({ length: 35 }, (_, i) => i + 2).map((n) => (
+                                                    <SelectItem key={n} value={n.toString()}>
+                                                        {n}x
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
+                                />
+                            </Field>
+                        )}
 
-                        <Field className="col-span-5 flex flex-col justify-center">
+                        <Field className={tipoSelecionado === "transferencia" ? "col-span-5 flex flex-col justify-center" : "col-span-5 flex flex-col justify-center"}>
                             <FieldLabel>Data</FieldLabel>
                             <Controller
                                 name="data"
@@ -328,45 +408,49 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                         </Field>
 
                         {/* Linha 4 */}
-                        <div className="col-span-5 flex items-center">
-                            <FieldLabel className="w-full m-0">
-                                <Field orientation="horizontal" className="w-full">
-                                    <Controller
-                                        name="pago"
-                                        control={control}
-                                        render={({ field }) => (
-                                            <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                                        )}
-                                    />
-                                    <FieldContent>
-                                        <FieldTitle>Despesa Paga</FieldTitle>
-                                        <FieldDescription className="text-xs">
-                                            Caso já pago, marque esta opção.
-                                        </FieldDescription>
-                                    </FieldContent>
-                                </Field>
-                            </FieldLabel>
-                        </div>
+                        {tipoSelecionado !== "transferencia" && (
+                            <>
+                                <div className="col-span-5 flex items-center">
+                                    <FieldLabel className="w-full m-0">
+                                        <Field orientation="horizontal" className="w-full">
+                                            <Controller
+                                                name="pago"
+                                                control={control}
+                                                render={({ field }) => (
+                                                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                                                )}
+                                            />
+                                            <FieldContent>
+                                                <FieldTitle>Despesa Paga</FieldTitle>
+                                                <FieldDescription className="text-xs">
+                                                    Caso já pago, marque esta opção.
+                                                </FieldDescription>
+                                            </FieldContent>
+                                        </Field>
+                                    </FieldLabel>
+                                </div>
 
-                        <div className="col-span-5 flex items-center">
-                            <FieldLabel className="w-full m-0">
-                                <Field orientation="horizontal" className="w-full">
-                                    <Controller
-                                        name="recorrente"
-                                        control={control}
-                                        render={({ field }) => (
-                                            <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                                        )}
-                                    />
-                                    <FieldContent>
-                                        <FieldTitle>Lanc. Recorrente</FieldTitle>
-                                        <FieldDescription className="text-xs">
-                                            Repete mensalmente por 5 anos.
-                                        </FieldDescription>
-                                    </FieldContent>
-                                </Field>
-                            </FieldLabel>
-                        </div>
+                                <div className="col-span-5 flex items-center">
+                                    <FieldLabel className="w-full m-0">
+                                        <Field orientation="horizontal" className="w-full">
+                                            <Controller
+                                                name="recorrente"
+                                                control={control}
+                                                render={({ field }) => (
+                                                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                                                )}
+                                            />
+                                            <FieldContent>
+                                                <FieldTitle>Lanc. Recorrente</FieldTitle>
+                                                <FieldDescription className="text-xs">
+                                                    Repete mensalmente por 5 anos.
+                                                </FieldDescription>
+                                            </FieldContent>
+                                        </Field>
+                                    </FieldLabel>
+                                </div>
+                            </>
+                        )}
 
                         {/* Linha 5 */}
 

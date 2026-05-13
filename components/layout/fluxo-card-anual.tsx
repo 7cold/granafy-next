@@ -89,7 +89,7 @@ function useResultadoAnual(apenasLancamentosPagos: boolean, idsContas?: number[]
 
             const lancamentos = (data ?? []).filter((l) => {
                 if (!apenasLancamentosPagos) return true
-                if (l.valor > 0) return true
+                // Para "Somente Pagos", consideramos apenas o que foi liquidado (recebido ou pago)
                 return l.pago === true
             })
 
@@ -182,7 +182,7 @@ export function ResultadoAnualCard() {
                             onCheckedChange={(v) => setApenasLancamentosPagos(Boolean(v))}
                         />
                         <Label htmlFor="apenas-pagos-anual" className="text-sm text-muted-foreground cursor-pointer whitespace-nowrap">
-                            Apenas pagos
+                            Somente pagos
                         </Label>
                     </div>
                 </div>
@@ -220,8 +220,8 @@ export function ResultadoAnualCard() {
                             accessibilityLayer
                             data={meses}
                             onMouseDown={(e) => {
-                                if (e && e.activeTooltipIndex != null) {
-                                    const dataPoint = meses?.[e.activeTooltipIndex as number];
+                                if (meses && e && e.activeTooltipIndex != null) {
+                                    const dataPoint = meses[e.activeTooltipIndex as number];
                                     if (dataPoint) {
                                         const [y, m] = dataPoint.chave.split("-");
                                         setMes(Number(m));

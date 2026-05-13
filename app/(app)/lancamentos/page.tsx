@@ -27,14 +27,24 @@ type Lancamentos = {
 }
 
 const columns: ColumnDef<Lancamentos>[] = [
+    {
+        accessorKey: "data",
+        header: "Data",
+        size: 100,
+        cell: ({ getValue }) => (
+            new Date(getValue() as string + 'T00:00:00').toLocaleDateString('pt-BR')
+        )
+    },
     { 
         accessorKey: "descricao", 
         header: "Descrição",
         cell: ({ row }) => {
             const { descricao, id_recorrencia, isFatura } = row.original as any
+            const isTransferencia = descricao?.includes("⇅")
+
             return (
                 <div className="flex items-center gap-2">
-                    {id_recorrencia && <RepeatIcon className="h-4 w-4 text-muted-foreground" />}
+                    {id_recorrencia && !isTransferencia && <RepeatIcon className="h-4 w-4 text-muted-foreground" />}
                     {isFatura && <CreditCardIcon className="h-4 w-4 text-primary" />}
                     <span className={isFatura ? "font-semibold text-primary" : ""}>{descricao}</span>
                 </div>
@@ -45,6 +55,7 @@ const columns: ColumnDef<Lancamentos>[] = [
     {
         accessorKey: "valor",
         header: "Valor",
+        size: 120,
         cell: ({ getValue }) => {
             const value = Number(getValue())
 
@@ -62,16 +73,11 @@ const columns: ColumnDef<Lancamentos>[] = [
     {
         accessorKey: "pago",
         header: "Pago",
+        size: 80,
         cell: ({ getValue }) => (
             <Badge variant="outline" className="px-1.5 text-muted-foreground">
                 {getValue() ? "Pago" : "Pendente"}
             </Badge>
-        )
-    },
-
-    {
-        accessorKey: "data", header: "Data", cell: ({ getValue }) => (
-            new Date(getValue() as string + 'T00:00:00').toLocaleDateString('pt-BR')
         )
     },
     {

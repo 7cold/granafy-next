@@ -123,6 +123,7 @@ export async function createLancamento(data: {
     user?: string
     parcelas?: number
     recorrente?: boolean
+    id_recorrencia?: number | null
 }) {
     const { data: { user } } = await supabase.auth.getUser()
     let parcelas = 1
@@ -156,7 +157,7 @@ export async function createLancamento(data: {
             user: user?.email,
             data: format(dataVencimento, "yyyy-MM-dd"),
             id_parcelamento: data.recorrente ? null : idAgrupamento,
-            id_recorrencia: data.recorrente ? idAgrupamento : null,
+            id_recorrencia: data.recorrente ? idAgrupamento : (data.id_recorrencia || null),
         }
     })
 
@@ -207,7 +208,16 @@ export async function deleteLancamentoComOpcao(
     const idAgrupamento = idRecorrencia || idParcelamento
 
     if (!idAgrupamento || opcao === "apenas_este") {
-        // sem parcelamento ou apaga só este
+        // Se for um lançamento vinculado (transferência), deletamos o par de qualquer forma
+        if (idRecorrencia && !idParcelamento) {
+             const { error } = await supabase
+                .from("lancamentos")
+                .delete()
+                .eq("id_recorrencia", idRecorrencia)
+            if (error) throw error
+            return
+        }
+
         const { error } = await supabase
             .from("lancamentos")
             .delete()
