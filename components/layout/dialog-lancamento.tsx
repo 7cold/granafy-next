@@ -146,7 +146,7 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
             }}
         >
             {/* DialogContent já inclui botão X e fecha com ESC por padrão */}
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-130">
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[520px]">
                 <DialogHeader>
                     <DialogTitle>Cadastrar Lançamento</DialogTitle>
                     <DialogDescription>
@@ -164,10 +164,25 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                                 control={control}
                                 render={({ field: { onChange, value } }) => (
                                     <Tabs value={value} onValueChange={onChange}>
-                                        <TabsList className="w-full grid grid-cols-3">
-                                            <TabsTrigger value="despesa">Despesa</TabsTrigger>
-                                            <TabsTrigger value="receita">Receita</TabsTrigger>
-                                            <TabsTrigger value="transferencia">Transferência</TabsTrigger>
+                                        <TabsList className="w-full grid grid-cols-3 bg-muted/50 p-1">
+                                            <TabsTrigger 
+                                                value="despesa"
+                                                className="data-[state=active]:bg-rose-500 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+                                            >
+                                                Despesa
+                                            </TabsTrigger>
+                                            <TabsTrigger 
+                                                value="receita"
+                                                className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+                                            >
+                                                Receita
+                                            </TabsTrigger>
+                                            <TabsTrigger 
+                                                value="transferencia"
+                                                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all"
+                                            >
+                                                Transferência
+                                            </TabsTrigger>
                                         </TabsList>
                                     </Tabs>
                                 )}
@@ -200,6 +215,7 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                             <Controller
                                 name="valor"
                                 control={control}
+                                rules={{ required: "Valor é obrigatório", min: { value: 0.01, message: "Valor deve ser maior que zero" } }}
                                 render={({ field }) => (
                                     <Input
                                         value={new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(field.value || 0))}
@@ -208,7 +224,7 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                                             const cents = parseInt(rawValue || "0", 10);
                                             field.onChange(cents / 100);
                                         }}
-                                        className="text-left font-mono"
+                                        className={`text-left font-mono ${errors.valor ? "border-rose-500 focus-visible:ring-rose-500" : ""}`}
                                         placeholder="0,00"
                                     />
                                 )}
@@ -227,7 +243,7 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                                     rules={{ required: "Selecione a categoria" }}
                                     render={({ field: { onChange, value } }) => (
                                         <Select value={value} onValueChange={onChange}>
-                                            <SelectTrigger className="w-full">
+                                            <SelectTrigger className={`w-full ${errors.categoria_id ? "border-rose-500 focus:ring-rose-500" : ""}`}>
                                                 <SelectValue placeholder="Selecione a Categoria" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -257,7 +273,7 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                                     control={control}
                                     render={({ field: { onChange, value } }) => (
                                         <Select value={value} onValueChange={onChange}>
-                                            <SelectTrigger className="w-full">
+                                            <SelectTrigger className={`w-full ${errors.conta_id ? "border-rose-500 focus:ring-rose-500" : ""}`}>
                                                 <SelectValue placeholder="Selecione a Conta" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -284,7 +300,7 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                                         control={control}
                                         render={({ field: { onChange, value } }) => (
                                             <Select value={value} onValueChange={onChange}>
-                                                <SelectTrigger className="w-full">
+                                                <SelectTrigger className={`w-full ${errors.id_cartao ? "border-rose-500 focus:ring-rose-500" : ""}`}>
                                                     <SelectValue placeholder="Selecione o Cartão" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -313,7 +329,7 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                                     control={control}
                                     render={({ field: { onChange, value } }) => (
                                         <Select value={value} onValueChange={onChange}>
-                                            <SelectTrigger className="w-full">
+                                            <SelectTrigger className={`w-full ${errors.conta_destino_id ? "border-rose-500 focus:ring-rose-500" : ""}`}>
                                                 <SelectValue placeholder="Selecione a Conta" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -358,6 +374,11 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                                         </Select>
                                     )}
                                 />
+                                {(!isRecorrente && (watch("parcelas") || 1) > 1 && (watch("valor") || 0) > 0) && (
+                                    <p className="text-[11px] text-muted-foreground mt-1 ml-1 animate-in fade-in slide-in-from-top-1">
+                                        Total: <span className="font-bold text-foreground">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((watch("valor") || 0) * (watch("parcelas") || 1))}</span>
+                                    </p>
+                                )}
                             </Field>
                         )}
 
@@ -373,7 +394,7 @@ export function DialogLancamento({ open, onOpenChange, modo = "conta", defaultCa
                                             <Button
                                                 variant="outline"
                                                 data-empty={!field.value}
-                                                className="w-full justify-between text-left font-normal data-[empty=true]:text-muted-foreground"
+                                                className={`w-full justify-between text-left font-normal data-[empty=true]:text-muted-foreground ${errors.data ? "border-rose-500 ring-rose-500" : ""}`}
                                             >
                                                 {field.value
                                                     ? format(new Date(

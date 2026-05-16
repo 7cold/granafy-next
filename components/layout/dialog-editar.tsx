@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { Button } from "@/components/ui/button"
@@ -19,6 +19,7 @@ import { useCartoes } from "@/services/cartoes"
 import { toast } from "sonner"
 import { updateLancamento } from "@/services/lancamentos"
 import { useQueryClient } from "@tanstack/react-query"
+import { DialogUpdateRecorrente } from "./dialog-update-recorrente"
 
 type DialogEditarLancamentoProps = {
     open: boolean
@@ -33,6 +34,9 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
     const { data: cartoes } = useCartoes()
     const { register, handleSubmit, control, reset, watch, formState: { errors } } = useForm();
     const tipoSelecionado = watch("tipo")
+
+    const [openUpdateRecorrenteDialog, setOpenUpdateRecorrenteDialog] = useState(false)
+    const [pendingUpdateData, setPendingUpdateData] = useState<any>(null)
 
     useEffect(() => {
         if (open && lancamento) {
@@ -55,9 +59,21 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
         const payload = {
             ...data,
             id: lancamento.id,
-            data: data.data ? new Date(data.data).toISOString() : null,
+            data: data.data ? new Date(data.data) : null,
         }
-        updateLancamento(payload)
+
+        const idAgrupamento = lancamento.id_recorrencia || lancamento.id_parcelamento
+
+        if (idAgrupamento) {
+            setPendingUpdateData(payload)
+            setOpenUpdateRecorrenteDialog(true)
+            return
+        }
+
+        updateLancamento({
+            ...payload,
+            data: payload.data ? new Date(payload.data) : new Date(),
+        })
             .then(() => {
                 toast.success("Lançamento atualizado com sucesso!")
                 queryClient.invalidateQueries({
@@ -82,7 +98,7 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
                 onOpenChange(openState)
             }}
         >
-            <AlertDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-130">
+            <AlertDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[520px]">
                 <AlertDialogHeader>
                     <AlertDialogTitle>Editar Lançamento</AlertDialogTitle>
                     <AlertDialogDescription>
@@ -101,6 +117,7 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
                             <Controller
                                 name="valor"
                                 control={control}
+                                rules={{ required: "Valor é obrigatório" }}
                                 render={({ field }) => (
                                     <Input
                                         value={new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(field.value || 0))}
@@ -109,7 +126,7 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
                                             const cents = parseInt(rawValue || "0", 10);
                                             field.onChange(cents / 100);
                                         }}
-                                        className="text-left font-mono"
+                                        className={`text-left font-mono ${errors.valor ? "border-rose-500 focus-visible:ring-rose-500" : ""}`}
                                         placeholder="0,00"
                                     />
                                 )}
@@ -137,7 +154,7 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
                                 <Select value={value} onValueChange={(val) => {
                                     onChange(val);
                                 }}>
-                                    <SelectTrigger className="w-full max-w-100">
+                                    <SelectTrigger className={`w-full max-w-[400px] ${errors.categoria_id ? "border-rose-500 focus:ring-rose-500" : ""}`}>
                                         <SelectValue placeholder="Selecione a Categoria" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -162,7 +179,7 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
                                 control={control}
                                 render={({ field: { onChange, value } }) => (
                                     <Select value={value} onValueChange={onChange}>
-                                        <SelectTrigger className="w-full max-w-100">
+                                        <SelectTrigger className={`w-full max-w-[400px] ${errors.id_cartao ? "border-rose-500 focus:ring-rose-500" : ""}`}>
                                             <SelectValue placeholder="Selecione o Cartão" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -187,7 +204,7 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
                                     <Select value={value} onValueChange={(val) => {
                                         onChange(val);
                                     }}>
-                                        <SelectTrigger className="w-full max-w-100">
+                                        <SelectTrigger className={`w-full max-w-[400px] ${errors.conta_id ? "border-rose-500 focus:ring-rose-500" : ""}`}>
                                             <SelectValue placeholder="Selecione a Conta" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -234,7 +251,7 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
                                         <Button
                                             variant="outline"
                                             data-empty={!field.value}
-                                            className="w-full max-w-100 justify-between text-left font-normal data-[empty=true]:text-muted-foreground"
+                                            className={`w-full max-w-[400px] justify-between text-left font-normal data-[empty=true]:text-muted-foreground ${errors.data ? "border-rose-500 ring-rose-500" : ""}`}
                                         >
                                             {field.value
                                                 ? format(
@@ -274,6 +291,17 @@ export function DialogEditarLancamento({ open, onOpenChange, lancamento }: Dialo
                     </div>
                 </form>
             </AlertDialogContent>
+
+            <DialogUpdateRecorrente
+                open={openUpdateRecorrenteDialog}
+                onOpenChange={setOpenUpdateRecorrenteDialog}
+                data={pendingUpdateData}
+                idRecorrencia={lancamento?.id_recorrencia}
+                idParcelamento={lancamento?.id_parcelamento}
+                onSuccess={() => {
+                    onOpenChange(false)
+                }}
+            />
         </AlertDialog>
     )
 }

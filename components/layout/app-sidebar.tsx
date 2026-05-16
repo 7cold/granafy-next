@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { LogOut, ChevronsUpDown } from "lucide-react"
 import {
@@ -63,6 +64,7 @@ const data = {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const router = useRouter()
+    const pathname = usePathname()
     const [email, setEmail] = React.useState<string | null>(null)
 
     React.useEffect(() => {
@@ -93,17 +95,25 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <SidebarGroup key={item.title}>
                         <SidebarGroupLabel>{item.title}</SidebarGroupLabel>
                         <SidebarGroupContent>
-                            <SidebarMenu>
-                                {item.items.map((subItem) => (
-                                    <SidebarMenuItem key={subItem.title}>
-                                        <SidebarMenuButton asChild>
-                                            <a href={subItem.url} className="flex items-center gap-3">
-                                                {subItem.icon && <subItem.icon className="h-4 w-4" />}
-                                                <span>{subItem.title}</span>
-                                            </a>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
-                                ))}
+                            <SidebarMenu className="flex gap-2">
+                                {item.items.map((subItem) => {
+                                    const isActive = pathname === subItem.url
+                                    return (
+                                        <SidebarMenuItem key={subItem.title}>
+                                            <SidebarMenuButton
+
+                                                asChild
+                                                isActive={isActive}
+                                                className={isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-bold shadow-sm !bg-green-100 dark:!bg-zinc-800" : ""}
+                                            >
+                                                <Link href={subItem.url} className="flex items-center gap-3">
+                                                    {subItem.icon && <subItem.icon className="h-4 w-4" />}
+                                                    <span>{subItem.title}</span>
+                                                </Link>
+                                            </SidebarMenuButton>
+                                        </SidebarMenuItem>
+                                    )
+                                })}
                             </SidebarMenu>
                         </SidebarGroupContent>
                     </SidebarGroup>

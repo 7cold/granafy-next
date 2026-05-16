@@ -12,6 +12,13 @@ import { Button } from "@/components/ui/button"
 import { ptBR } from "date-fns/locale"
 import { useLancamentosStore } from "@/store/lancamentosStore"
 import { useUser } from "@/hooks/useUser"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from "@/components/ui/dialog"
 
 const CORES = [
     "var(--chart-1)",
@@ -19,6 +26,21 @@ const CORES = [
     "var(--chart-3)",
     "var(--chart-4)",
     "var(--chart-5)",
+    "var(--chart-6)",
+    "var(--chart-7)",
+    "var(--chart-8)",
+    "var(--chart-9)",
+    "var(--chart-10)",
+    "var(--chart-11)",
+    "var(--chart-12)",
+    "var(--chart-13)",
+    "var(--chart-14)",
+    "var(--chart-15)",
+    "var(--chart-16)",
+    "var(--chart-17)",
+    "var(--chart-18)",
+    "var(--chart-19)",
+    "var(--chart-20)",
 ]
 
 function useCategoriasMes(mes: number, ano: number) {
@@ -35,17 +57,25 @@ function useCategoriasMes(mes: number, ano: number) {
             const despesas: Record<string, number> = {}
 
             for (const l of data ?? []) {
+                // Ignorar transferências (categoria_id "0" ou 0)
+                if (String(l.categoria_id) === "0") continue
+
                 const cat = l.categoriaNome ?? "Sem categoria"
-                if (l.valor > 0) {
+                if (l.tipo === "receita") {
                     recebimentos[cat] = (recebimentos[cat] ?? 0) + l.valor
-                } else {
+                } else if (l.tipo === "despesa") {
                     despesas[cat] = (despesas[cat] ?? 0) + Math.abs(l.valor)
                 }
             }
 
             return {
-                recebimentos: Object.entries(recebimentos).map(([cat, valor]) => ({ cat, valor })),
-                despesas: Object.entries(despesas).map(([cat, valor]) => ({ cat, valor })),
+                recebimentos: Object.entries(recebimentos)
+                    .map(([cat, valor]) => ({ cat, valor }))
+                    .sort((a, b) => b.valor - a.valor),
+                despesas: Object.entries(despesas)
+                    .map(([cat, valor]) => ({ cat, valor }))
+                    .sort((a, b) => b.valor - a.valor),
+                raw: data ?? []
             }
         },
         staleTime: 1000 * 60 * 5,
@@ -68,10 +98,14 @@ function PieSection({
     title,
     items,
     emptyMessage,
+    onCategoryClick,
+    type,
 }: {
     title: string
     items: { cat: string; valor: number }[]
     emptyMessage: string
+    onCategoryClick: (cat: string, type: "receita" | "despesa") => void
+    type: "receita" | "despesa"
 }) {
     const config = buildChartConfig(items)
     const total = items.reduce((s, i) => s + i.valor, 0)
@@ -120,13 +154,17 @@ function PieSection({
 
             <div className="flex flex-col gap-1.5">
                 {items.map((item, i) => (
-                    <div key={item.cat} className="flex items-center justify-between text-xs">
+                    <div
+                        key={item.cat}
+                        className="flex items-center justify-between text-xs cursor-pointer hover:bg-muted/50 p-1 rounded-sm transition-colors group"
+                        onClick={() => onCategoryClick(item.cat, type)}
+                    >
                         <div className="flex items-center gap-1.5">
                             <span
                                 className="inline-block h-2 w-2 rounded-full shrink-0"
                                 style={{ background: CORES[i % CORES.length] }}
                             />
-                            <span className="text-muted-foreground truncate max-w-30">{item.cat}</span>
+                            <span className="text-muted-foreground truncate max-w-30 group-hover:text-foreground transition-colors">{item.cat}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="font-medium">{fmt(item.valor)}</span>
@@ -145,9 +183,12 @@ function PieSection({
     )
 }
 
+
 export function CategoriasMesCard() {
     const hoje = new Date()
     const { mesSelecionado, anoSelecionado, setMes, setAno } = useLancamentosStore()
+
+    const [selectedCategory, setSelectedCategory] = useState<{ cat: string; type: "receita" | "despesa" } | null>(null)
 
     const mes = mesSelecionado ?? (hoje.getMonth() + 1)
     const ano = anoSelecionado ?? hoje.getFullYear()
@@ -158,63 +199,112 @@ export function CategoriasMesCard() {
     const mesLabel = format(mesRef, "MMMM 'de' yyyy", { locale: ptBR })
     const mesCapitalizado = mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1)
 
-    return (
-        <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div className="flex flex-col space-y-1.5">
-                    <CardTitle>Categorias do Mês</CardTitle>
-                    <CardDescription>{mesCapitalizado}</CardDescription>
-                </div>
-                <div className="flex items-center gap-1">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0"
-                        onClick={() => {
-                            const prev = subMonths(mesRef, 1)
-                            setMes(prev.getMonth() + 1)
-                            setAno(prev.getFullYear())
-                        }}
-                    >
-                        <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0"
-                        onClick={() => {
-                            const next = addMonths(mesRef, 1)
-                            setMes(next.getMonth() + 1)
-                            setAno(next.getFullYear())
-                        }}
-                    >
-                        <ChevronRight className="h-4 w-4" />
-                    </Button>
-                </div>
-            </CardHeader>
+    // Lançamentos filtrados para o modal de detalhes
+    const lancamentosFiltrados = data?.raw?.filter(l =>
+        (l.categoriaNome ?? "Sem categoria") === selectedCategory?.cat &&
+        l.tipo === selectedCategory?.type
+    ).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
 
-            <CardContent>
-                {isLoading ? (
-                    <div className="h-50 flex items-center justify-center text-muted-foreground text-sm">
-                        Carregando...
+    const handleCategoryClick = (cat: string, type: "receita" | "despesa") => {
+        setSelectedCategory({ cat, type })
+    }
+
+    return (
+        <>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <div className="flex flex-col space-y-1.5">
+                        <CardTitle>Categorias do Mês</CardTitle>
+                        <CardDescription>{mesCapitalizado}</CardDescription>
                     </div>
-                ) : (
-                    <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 sm:divide-x">
-                        <PieSection
-                            title="Recebimentos"
-                            items={data?.recebimentos ?? []}
-                            emptyMessage="Nenhum recebimento neste mês"
-                        />
-                        <div className="sm:pl-8">
+                    <div className="flex items-center gap-1">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={() => {
+                                const prev = subMonths(mesRef, 1)
+                                setMes(prev.getMonth() + 1)
+                                setAno(prev.getFullYear())
+                            }}
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={() => {
+                                const next = addMonths(mesRef, 1)
+                                setMes(next.getMonth() + 1)
+                                setAno(next.getFullYear())
+                            }}
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </CardHeader>
+
+                <CardContent>
+                    {isLoading ? (
+                        <div className="h-50 flex items-center justify-center text-muted-foreground text-sm">
+                            Carregando...
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 sm:divide-x">
                             <PieSection
-                                title="Despesas"
-                                items={data?.despesas ?? []}
-                                emptyMessage="Nenhuma despesa neste mês"
+                                title="Recebimentos"
+                                items={data?.recebimentos ?? []}
+                                emptyMessage="Nenhum recebimento neste mês"
+                                onCategoryClick={handleCategoryClick}
+                                type="receita"
                             />
+                            <div className="sm:pl-8">
+                                <PieSection
+                                    title="Despesas"
+                                    items={data?.despesas ?? []}
+                                    emptyMessage="Nenhuma despesa neste mês"
+                                    onCategoryClick={handleCategoryClick}
+                                    type="despesa"
+                                />
+                            </div>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            <Dialog open={!!selectedCategory} onOpenChange={(open) => !open && setSelectedCategory(null)}>
+                <DialogContent className="max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Detalhes: {selectedCategory?.cat}</DialogTitle>
+                        <DialogDescription>
+                            {selectedCategory?.type === "receita" ? "Recebimentos" : "Despesas"} de {selectedCategory?.cat} em {mesCapitalizado}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-4 max-h-[60vh] overflow-y-auto no-scrollbar">
+                        <div className="flex flex-col gap-3">
+                            {lancamentosFiltrados?.map((l: any) => (
+                                <div key={l.id} className="flex items-center justify-between p-2 rounded-lg border bg-card hover:bg-muted/30 transition-colors">
+                                    <div className="flex flex-col gap-0.5">
+                                        <span className="text-sm font-medium">{l.descricao}</span>
+                                        <span className="text-[10px] text-muted-foreground">
+                                            {format(new Date(l.data + 'T12:00:00'), "dd/MM/yyyy")}
+                                        </span>
+                                    </div>
+                                    <span className={`text-sm font-semibold ${l.valor < 0 ? "text-red-500" : "text-green-500"}`}>
+                                        {fmt(l.valor)}
+                                    </span>
+                                </div>
+                            ))}
+                            {(!lancamentosFiltrados || lancamentosFiltrados.length === 0) && (
+                                <p className="text-center text-sm text-muted-foreground py-8">
+                                    Nenhum lançamento encontrado.
+                                </p>
+                            )}
                         </div>
                     </div>
-                )}
-            </CardContent>
-        </Card>
+                </DialogContent>
+            </Dialog>
+        </>
     )
 }

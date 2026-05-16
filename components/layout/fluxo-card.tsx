@@ -66,6 +66,9 @@ function useFluxo6Meses(idsContas?: number[]) {
             }
 
             for (const l of lancamentos || []) {
+                // Ignorar transferências (categoria_id "0" ou 0)
+                if (String(l.categoria_id) === "0") continue
+
                 let dataFinanceira = l.data;
 
                 // Lógica de Teletransporte para Cartão

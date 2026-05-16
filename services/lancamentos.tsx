@@ -176,9 +176,6 @@ export async function updateLancamento(data: {
     pago: boolean
     data: Date
 }) {
-
-    console.log("Updating lancamento with data:", data)
-
     const { error } = await supabase
         .from("lancamentos")
         .update({
@@ -197,6 +194,103 @@ export async function updateLancamento(data: {
 
     if (error) throw error
 }
+
+export async function updateLancamentoComOpcao(
+    data: any,
+    opcao: "apenas_este" | "este_e_proximos" | "todos",
+    idParcelamento?: number | null,
+    idRecorrencia?: number | null
+) {
+    const agrupamentoColuna = idRecorrencia ? "id_recorrencia" : "id_parcelamento"
+    const idAgrupamento = idRecorrencia || idParcelamento
+
+    const updateData: any = {
+        tipo: data.tipo,
+        descricao: data.descricao,
+        valor: data.tipo === "despesa"
+            ? -Math.abs(data.valor)
+            : Math.abs(data.valor),
+        categoria_id: Number(data.categoria_id),
+        conta_id: data.conta_id ? Number(data.conta_id) : null,
+        id_cartao: data.id_cartao ? Number(data.id_cartao) : null,
+        pago: data.pago,
+    }
+
+    if (!idAgrupamento || opcao === "apenas_este") {
+        // Para apenas um, atualizamos tudo inclusive a data
+        const { error } = await supabase
+            .from("lancamentos")
+            .update({
+                ...updateData,
+                data: data.data ? new Date(data.data).toISOString() : null
+            })
+            .eq("id", data.id)
+        if (error) throw error
+        return
+    }
+
+    // Se chegou aqui, é bulk update (todos ou este_e_proximos)
+    
+    // 1. Busca a data do lançamento ORIGINAL (antes da alteração) para servir de marco
+    const { data: lancamentoOriginal } = await supabase
+        .from("lancamentos")
+        .select("data")
+        .eq("id", data.id)
+        .single()
+
+    const dataMarco = lancamentoOriginal?.data || data.data
+
+    // 2. Atualiza o registro atual com TUDO (incluindo a nova data)
+    const { error: errorCurrent } = await supabase
+        .from("lancamentos")
+        .update({
+            ...updateData,
+            data: data.data ? new Date(data.data).toISOString() : null
+        })
+        .eq("id", data.id)
+    if (errorCurrent) throw errorCurrent
+
+    // 3. Atualiza os outros do grupo com lógica inteligente de data
+    const newDateObj = new Date(data.data + 'T12:00:00')
+    const newDay = newDateObj.getDate()
+
+    let queryOthers = supabase
+        .from("lancamentos")
+        .select("id, data")
+        .eq(agrupamentoColuna, idAgrupamento)
+        .neq("id", data.id)
+
+    if (opcao === "este_e_proximos") {
+        queryOthers = queryOthers.gte("data", dataMarco)
+    }
+
+    const { data: others, error: errorFetch } = await queryOthers
+    if (errorFetch) throw errorFetch
+
+    if (others && others.length > 0) {
+        // Realiza as atualizações em paralelo (ou sequência se preferir)
+        // Para muitos registros, o ideal seria um RPC, mas para recorrências comuns (12-60 meses) isso funciona bem.
+        await Promise.all(others.map(async (item) => {
+            const originalDate = new Date(item.data + 'T12:00:00')
+            const adjustedDate = new Date(originalDate.getFullYear(), originalDate.getMonth(), newDay, 12, 0, 0)
+            
+            // Tratamento para meses curtos (ex: dia 31 em mês de 30 dias)
+            // Se o mês "pulou", voltamos para o último dia do mês correto
+            if (adjustedDate.getMonth() !== originalDate.getMonth()) {
+                adjustedDate.setDate(0) // Último dia do mês anterior
+            }
+
+            return supabase
+                .from("lancamentos")
+                .update({
+                    ...updateData,
+                    data: adjustedDate.toISOString()
+                })
+                .eq("id", item.id)
+        }))
+    }
+}
+
 
 export async function deleteLancamentoComOpcao(
     id: number,

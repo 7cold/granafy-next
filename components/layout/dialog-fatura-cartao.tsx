@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { format, addMonths, subMonths } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -25,7 +25,14 @@ interface DialogFaturaCartaoProps {
 export function DialogFaturaCartao({ cartao, open, onOpenChange }: DialogFaturaCartaoProps) {
     const queryClient = useQueryClient()
     const { data: categorias } = useCategorias()
-    const [currentDate, setCurrentDate] = useState(new Date())
+    const [currentDate, setCurrentDate] = useState(() => addMonths(new Date(), 1))
+
+    useEffect(() => {
+        if (open) {
+            setCurrentDate(addMonths(new Date(), 1))
+        }
+    }, [open])
+
     const [isLancamentoOpen, setIsLancamentoOpen] = useState(false)
     const [editingLancamento, setEditingLancamento] = useState<any | null>(null)
     const [deletingLancamento, setDeletingLancamento] = useState<any | null>(null)

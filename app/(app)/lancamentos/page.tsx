@@ -54,30 +54,34 @@ const columns: ColumnDef<Lancamentos>[] = [
 
     {
         accessorKey: "valor",
-        header: "Valor",
+        header: () => <div className="text-right">Valor</div>,
         size: 120,
         cell: ({ getValue }) => {
             const value = Number(getValue())
 
             return (
-                <span className={value < 0 ? "text-red-600 font-medium" : "text-green-600 font-medium"}>
-                    {value.toLocaleString("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                    })}
-                </span>
+                <div className="text-right">
+                    <span className={value < 0 ? "text-red-600 font-medium" : "text-green-600 font-medium"}>
+                        {value.toLocaleString("pt-BR", {
+                            style: "currency",
+                            currency: "BRL",
+                        })}
+                    </span>
+                </div>
             )
         }
     },
 
     {
         accessorKey: "pago",
-        header: "Pago",
+        header: () => <div className="text-center">Pago</div>,
         size: 80,
         cell: ({ getValue }) => (
-            <Badge variant="outline" className="px-1.5 text-muted-foreground">
-                {getValue() ? "Pago" : "Pendente"}
-            </Badge>
+            <div className="flex justify-center">
+                <Badge variant="outline" className="px-1.5 text-muted-foreground">
+                    {getValue() ? "Pago" : "Pendente"}
+                </Badge>
+            </div>
         )
     },
     {

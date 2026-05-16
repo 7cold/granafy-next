@@ -11,6 +11,7 @@ import {
 import {
     Sheet,
     SheetContent,
+    SheetDescription,
     SheetHeader,
     SheetTitle,
 } from "@/components/ui/sheet"
@@ -29,6 +30,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { DialogDeleteLancamento } from "./dialog-delete-lancamento"
 import { toast } from "sonner"
 import { DialogEditarLancamento } from "./dialog-editar"
+import { DialogUpdateRecorrente } from "./dialog-update-recorrente"
 import { useSaldosPorDia, SaldoDia } from '@/hooks/useSaldoDia'
 import { Check, Pencil, X, Save, CheckCircle2, Circle, CalendarIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -67,6 +69,10 @@ export function DataTable<TData extends { data?: string }>({ columns, data, onFa
     const [editField, setEditField] = React.useState<string | null>(null)
     const [editValue, setEditValue] = React.useState<any>(null)
 
+    // Estado para atualização recorrente (Quick Edit)
+    const [openUpdateRecorrenteDialog, setOpenUpdateRecorrenteDialog] = React.useState(false)
+    const [pendingUpdateData, setPendingUpdateData] = React.useState<any>(null)
+
     // Resetar estados de edição ao fechar o sheet ou trocar de linha
     React.useEffect(() => {
         if (!openSheet) {
@@ -103,10 +109,22 @@ export function DataTable<TData extends { data?: string }>({ columns, data, onFa
     })
 
     const handleQuickUpdate = (field: string, value: any) => {
+        const original = rowSelected as any
+        const newData = { ...original, [field]: value }
+
+        const idAgrupamento = original.id_recorrencia || original.id_parcelamento
+        const isUpdatingPago = field === "pago"
+
+        if (idAgrupamento && !isUpdatingPago) {
+            setPendingUpdateData(newData)
+            setOpenUpdateRecorrenteDialog(true)
+            return
+        }
+
         mutationUpdate.mutate({ [field]: value })
         // Atualiza o estado local do rowSelected para refletir a mudança no Sheet imediatamente
         if (rowSelected) {
-            setRowSelected({ ...rowSelected, [field]: value })
+            setRowSelected(newData)
         }
     }
 
@@ -205,11 +223,15 @@ export function DataTable<TData extends { data?: string }>({ columns, data, onFa
                 </Table>
             </div>
 
-            {/* Sheet de Detalhes Rápidos */}
             <Sheet open={openSheet} onOpenChange={setOpenSheet}>
-                <SheetContent side="right" className="w-105">
+                <SheetContent side="right" className="w-[420px] sm:max-w-[420px]">
                     <SheetHeader className="flex flex-row items-center justify-between space-y-0 pb-4 border-b mt-8">
-                        <SheetTitle>Detalhes</SheetTitle>
+                        <div>
+                            <SheetTitle>Detalhes</SheetTitle>
+                            <SheetDescription className="sr-only">
+                                Detalhes do lançamento selecionado para visualização e edição rápida.
+                            </SheetDescription>
+                        </div>
                         <div className="flex gap-2">
                             <Button
                                 variant="destructive"
@@ -376,6 +398,20 @@ export function DataTable<TData extends { data?: string }>({ columns, data, onFa
                 open={openEditDialog}
                 onOpenChange={setOpenEditDialog}
                 lancamento={rowSelected}
+            />
+
+            <DialogUpdateRecorrente
+                open={openUpdateRecorrenteDialog}
+                onOpenChange={setOpenUpdateRecorrenteDialog}
+                data={pendingUpdateData}
+                idRecorrencia={pendingUpdateData?.id_recorrencia}
+                idParcelamento={pendingUpdateData?.id_parcelamento}
+                onSuccess={() => {
+                    if (rowSelected && pendingUpdateData) {
+                        setRowSelected(pendingUpdateData)
+                    }
+                    setEditField(null)
+                }}
             />
         </>
     )
